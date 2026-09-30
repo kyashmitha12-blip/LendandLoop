@@ -19,105 +19,243 @@ themeToggle?.addEventListener('click', ()=>{
   setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
 });
 
-/* ================= STORAGE HELPERS ================= */
+const API_BASE = '/api';
+const state = {
+  currentUser: null,
+  resources: [],
+  bookings: [],
+  notifications: [],
+  analytics: {}
+};
+
 const USERS_KEY = 'll_users';
 const SESSION_KEY = 'll_session';
 const RESOURCES_KEY = 'll_resources';
 const BOOKINGS_KEY = 'll_bookings';
-const DEMO_SEEDED_KEY = 'll_demo_resources_seeded';
 
 function getUsers(){
   try { return JSON.parse(localStorage.getItem(USERS_KEY)) || {}; }
-  catch(e){ return {}; }
+  catch { return {}; }
 }
 function saveUsers(users){ localStorage.setItem(USERS_KEY, JSON.stringify(users)); }
 function getSessionEmail(){ return localStorage.getItem(SESSION_KEY); }
 function setSessionEmail(email){ localStorage.setItem(SESSION_KEY, email); }
-function clearSession(){ localStorage.removeItem(SESSION_KEY); }
-function getResources(){
-  try { return JSON.parse(localStorage.getItem(RESOURCES_KEY)) || []; }
-  catch(e){ return []; }
+function clearSession(){ localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem('ll_token'); }
+function getResources(){ return state.resources.length ? state.resources : (JSON.parse(localStorage.getItem(RESOURCES_KEY) || '[]')); }
+function saveResources(list){
+  state.resources = list;
+  localStorage.setItem(RESOURCES_KEY, JSON.stringify(list));
 }
-function saveResources(list){ localStorage.setItem(RESOURCES_KEY, JSON.stringify(list)); }
-function getBookings(){
-  try { return JSON.parse(localStorage.getItem(BOOKINGS_KEY)) || []; }
-  catch(e){ return []; }
-}
-function saveBookings(list){ localStorage.setItem(BOOKINGS_KEY, JSON.stringify(list)); }
-
-let currentUser = null; // { name, email, passwordHash, studentId, cardPhoto, verified: 'no'|'pending'|'yes' }
-
-/* very small non-cryptographic hash — this is a front-end demo with no
-   backend, so this just avoids storing raw passwords in localStorage as
-   plaintext. It is NOT secure for a real production login system. */
-function hashPassword(pw){
-  let h = 0;
-  for (let i=0;i<pw.length;i++){ h = (Math.imul(31,h) + pw.charCodeAt(i)) | 0; }
-  return 'h' + h.toString(16);
+function getBookings(){ return state.bookings.length ? state.bookings : (JSON.parse(localStorage.getItem(BOOKINGS_KEY) || '[]')); }
+function saveBookings(list){
+  state.bookings = list;
+  localStorage.setItem(BOOKINGS_KEY, JSON.stringify(list));
 }
 
-/* ================= AUTH UI ================= */
+function getSessionToken(){ return sessionStorage.getItem('ll_token'); }
+function setSessionToken(token){
+  if (token) sessionStorage.setItem('ll_token', token);
+  else sessionStorage.removeItem('ll_token');
+}
+
+async function apiFetch(endpoint, options = {}){
+  const token = getSessionToken();
+  const headers = { ...(options.headers || {}) };
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+  }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers
+  });
+
+  const raw = await response.text();
+  let data = {};
+  try { data = raw ? JSON.parse(raw) : {}; }
+  catch { data = { error: raw || 'Request failed' }; }
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Request failed');
+  }
+
+  return data;
+}
+
+function normalizeUser(user){
+  if (!user) return null;
+  return {
+    ...user,
+    verified: user.verification_status || user.verified || 'no'
+  };
+}
+
+function normalizeResource(resource){
+  if (!resource) return null;
+  return {
+    ...resource,
+    id: String(resource.id),
+    ownerEmail: resource.ownerEmail || resource.owner_email,
+    sub: resource.sub || resource.description,
+    cat: resource.cat || resource.category,
+    price: resource.price || resource.price_per_day,
+    ic: resource.ic || resource.icon,
+    bg: resource.bg || resource.color,
+    distanceKm: resource.distanceKm ?? resource.distance_km ?? 1,
+    condition: resource.condition || 'Good',
+    reliability: resource.reliability ?? 90,
+    durationDays: resource.durationDays ?? resource.duration_days ?? 1,
+    status: resource.status || 'available'
+  };
+}
+
+function resourceStatus(resource){ return resource?.status || 'available'; }
+function predictionForResource(resource){
+  const name = `${resource.name || ''} ${resource.sub || ''}`.toLowerCase();
+  if (/dslr|camera/.test(name)) return { key: 'dslr', name: 'DSLR Camera', demand: 8, supply: 6, period: 'Next 7 days' };
+  if (/arduino/.test(name)) return { key: 'arduino', name: 'Arduino Kit', demand: 15, supply: 10, period: 'Next 7 days' };
+  if (/microphone|mic\b/.test(name)) return { key: 'microphone', name: 'Microphone', demand: 9, supply: 4, period: 'Next 7 days' };
+  if (/tripod/.test(name)) return { key: 'tripod', name: 'Tripod', demand: 7, supply: 3, period: 'Next 7 days' };
+  return { key: 'projector', name: 'Projector', demand: 12, supply: 5, period: 'Next 7 days' };
+}
+function predictedGap(prediction){ return Math.max(0, prediction.demand - prediction.supply); }
+function matchScore(resource){
+  const availability = resourceStatus(resource) === 'available' ? 12 : 0;
+  const condition = resource.condition === 'Excellent' ? 12 : resource.condition === 'Good' ? 8 : 3;
+  const distance = Number(resource.distanceKm || 1) <= 1 ? 8 : Number(resource.distanceKm || 1) <= 1.5 ? 6 : Number(resource.distanceKm || 1) <= 3 ? 3 : 0;
+  const priceValue = Number(String(resource.price || '').replace(/[^\d]/g, '')) || 0;
+  const price = priceValue <= 60 ? 8 : priceValue <= 120 ? 6 : priceValue <= 150 ? 4 : 1;
+  const duration = (resource.durationDays || 1) <= 3 ? 3 : -2;
+  return Math.min(99, Math.round(50 + availability + condition + distance + price + duration + (resource.reliability || 85) * 0.1));
+}
+
+async function hydrateSession(){
+  const token = getSessionToken();
+  if (!token) {
+    state.currentUser = null;
+    state.resources = [];
+    state.bookings = [];
+    state.notifications = [];
+    state.analytics = {};
+    return;
+  }
+
+  try {
+    const me = await apiFetch('/auth/me');
+    state.currentUser = normalizeUser(me.user);
+  } catch (error) {
+    clearSession();
+    state.currentUser = null;
+    return;
+  }
+
+  try {
+    const resourcesRes = await apiFetch('/resources');
+    state.resources = (resourcesRes.resources || []).map(normalizeResource);
+    saveResources(state.resources);
+  } catch (error) {
+    state.resources = [];
+  }
+
+  try {
+    const bookingData = await apiFetch('/bookings/my');
+    state.bookings = bookingData.bookings || [];
+    saveBookings(state.bookings);
+  } catch (error) {
+    state.bookings = [];
+  }
+
+  try {
+    const notificationsData = await apiFetch('/notifications');
+    state.notifications = notificationsData.notifications || [];
+  } catch (error) {
+    state.notifications = [];
+  }
+
+  if (state.currentUser && state.currentUser.role === 'admin') {
+    try {
+      const analyticsData = await apiFetch('/admin/analytics');
+      state.analytics = analyticsData || {};
+    } catch (error) {
+      state.analytics = {};
+    }
+  }
+}
+
 function switchAuthTab(tab){
-  document.getElementById('atab-login').classList.toggle('active', tab==='login');
-  document.getElementById('atab-signup').classList.toggle('active', tab==='signup');
-  document.getElementById('auth-login').style.display = tab==='login' ? 'block' : 'none';
-  document.getElementById('auth-signup').style.display = tab==='signup' ? 'block' : 'none';
+  document.getElementById('atab-login').classList.toggle('active', tab === 'login');
+  document.getElementById('atab-signup').classList.toggle('active', tab === 'signup');
+  document.getElementById('auth-login').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('auth-signup').style.display = tab === 'signup' ? 'block' : 'none';
   document.getElementById('login-error').textContent = '';
   document.getElementById('signup-error').textContent = '';
 }
-document.getElementById('atab-login').addEventListener('click', ()=>switchAuthTab('login'));
-document.getElementById('atab-signup').addEventListener('click', ()=>switchAuthTab('signup'));
 
-function handleSignup(){
+document.getElementById('atab-login').addEventListener('click', () => switchAuthTab('login'));
+document.getElementById('atab-signup').addEventListener('click', () => switchAuthTab('signup'));
+
+async function handleSignup(){
   const name = document.getElementById('signup-name').value.trim();
   const email = document.getElementById('signup-email').value.trim().toLowerCase();
-  const pw = document.getElementById('signup-password').value;
+  const password = document.getElementById('signup-password').value;
   const err = document.getElementById('signup-error');
   err.textContent = '';
 
-  if (!name || !email || !pw){ err.textContent = 'Fill in all fields.'; return; }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ err.textContent = 'Enter a valid email address.'; return; }
-  if (pw.length < 6){ err.textContent = 'Password must be at least 6 characters.'; return; }
+  if (!name || !email || !password) { err.textContent = 'Fill in all fields.'; return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Enter a valid email address.'; return; }
+  if (password.length < 6) { err.textContent = 'Password must be at least 6 characters.'; return; }
 
-  const users = getUsers();
-  if (users[email]){ err.textContent = 'An account with this email already exists.'; return; }
-
-  users[email] = {
-    name, email,
-    passwordHash: hashPassword(pw),
-    studentId: '', cardPhotoName: '',
-    verified: 'no'
-  };
-  saveUsers(users);
-  setSessionEmail(email);
-  document.getElementById('signup-name').value = '';
-  document.getElementById('signup-email').value = '';
-  document.getElementById('signup-password').value = '';
-  enterApp();
+  try {
+    const result = await apiFetch('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, password })
+    });
+    setSessionEmail(email);
+    setSessionToken(result.token);
+    state.currentUser = normalizeUser(result.user);
+    document.getElementById('signup-name').value = '';
+    document.getElementById('signup-email').value = '';
+    document.getElementById('signup-password').value = '';
+    await enterApp();
+  } catch (error) {
+    err.textContent = error.message;
+  }
 }
 
-function handleLogin(){
+async function handleLogin(){
   const email = document.getElementById('login-email').value.trim().toLowerCase();
-  const pw = document.getElementById('login-password').value;
+  const password = document.getElementById('login-password').value;
   const err = document.getElementById('login-error');
   err.textContent = '';
 
-  if (!email || !pw){ err.textContent = 'Enter your email and password.'; return; }
+  if (!email || !password) { err.textContent = 'Enter your email and password.'; return; }
 
-  const users = getUsers();
-  const user = users[email];
-  if (!user || user.passwordHash !== hashPassword(pw)){
-    err.textContent = 'Incorrect email or password.';
-    return;
+  try {
+    const result = await apiFetch('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    });
+    setSessionEmail(email);
+    setSessionToken(result.token);
+    state.currentUser = normalizeUser(result.user);
+    document.getElementById('login-password').value = '';
+    await enterApp();
+  } catch (error) {
+    err.textContent = error.message;
   }
-  setSessionEmail(email);
-  document.getElementById('login-password').value = '';
-  enterApp();
 }
 
-function handleLogout(){
+async function handleLogout(){
+  try { await apiFetch('/auth/logout', { method: 'POST' }); } catch (error) {}
   clearSession();
-  currentUser = null;
+  state.currentUser = null;
+  state.resources = [];
+  state.bookings = [];
+  state.notifications = [];
+  state.analytics = {};
   document.getElementById('app-root').style.display = 'none';
   document.getElementById('auth-overlay').style.display = 'flex';
   document.getElementById('login-email').value = '';
@@ -125,12 +263,13 @@ function handleLogout(){
   switchAuthTab('login');
 }
 
-function enterApp(){
-  const email = getSessionEmail();
-  const users = getUsers();
-  currentUser = users[email];
-  if (!currentUser){ handleLogout(); return; }
-  ensureDemoResources();
+async function enterApp(){
+  await hydrateSession();
+  if (!state.currentUser) {
+    document.getElementById('auth-overlay').style.display = 'flex';
+    document.getElementById('app-root').style.display = 'none';
+    return;
+  }
 
   document.getElementById('auth-overlay').style.display = 'none';
   document.getElementById('app-root').style.display = 'flex';
@@ -141,73 +280,70 @@ function enterApp(){
 }
 
 function renderUserSidebar(){
-  document.getElementById('user-name').textContent = currentUser.name;
-  document.getElementById('user-avatar').textContent = currentUser.name.trim().charAt(0).toUpperCase() || '👤';
-  const subMap = { no:'Not verified', pending:'Verification pending', yes:'Verified student' };
-  document.getElementById('user-sub').textContent = subMap[currentUser.verified] || 'Not verified';
-  document.getElementById('dash-greeting').textContent = 'Welcome, ' + currentUser.name.split(' ')[0];
-  document.getElementById('verify-alert').style.display = currentUser.verified === 'yes' ? 'none' : 'flex';
+  const user = state.currentUser;
+  if (!user) return;
+  document.getElementById('user-name').textContent = user.name;
+  document.getElementById('user-avatar').textContent = user.name.trim().charAt(0).toUpperCase() || '👤';
+  const subMap = { no: 'Not verified', pending: 'Verification pending', yes: 'Verified student' };
+  document.getElementById('user-sub').textContent = subMap[user.verified] || 'Not verified';
+  document.getElementById('dash-greeting').textContent = 'Welcome, ' + user.name.split(' ')[0];
+  document.getElementById('verify-alert').style.display = user.verified === 'yes' ? 'none' : 'flex';
 }
 
-/* ================= VERIFICATION ================= */
 function renderVerifyStatus(){
   const verifiedBox = document.getElementById('verify-status-verified');
   const pendingBox = document.getElementById('verify-status-pending');
   const formCard = document.getElementById('verify-form-card');
+  const status = state.currentUser ? (state.currentUser.verification_status || state.currentUser.verified || 'no') : 'no';
 
   verifiedBox.style.display = 'none';
   pendingBox.style.display = 'none';
   formCard.style.display = 'block';
 
-  if (currentUser.verified === 'yes'){
+  if (status === 'yes') {
     verifiedBox.style.display = 'flex';
     formCard.style.display = 'none';
-  } else if (currentUser.verified === 'pending'){
+  } else if (status === 'pending') {
     pendingBox.style.display = 'flex';
     formCard.style.display = 'none';
   }
 }
 
-function submitVerification(){
+async function submitVerification(){
   const name = document.getElementById('verify-name').value.trim();
-  const card = document.getElementById('verify-card').value.trim();
+  const studentId = document.getElementById('verify-card').value.trim();
   const photoInput = document.getElementById('verify-photo');
   const err = document.getElementById('verify-error');
   err.textContent = '';
 
-  if (!name || !card){ err.textContent = 'Enter your name and campus card number.'; return; }
-  if (!photoInput.files || !photoInput.files[0]){ err.textContent = 'Upload a photo of your campus card.'; return; }
+  if (!name || !studentId) {
+    err.textContent = 'Enter your name and campus card number.';
+    return;
+  }
+  if (!photoInput.files || !photoInput.files[0]) {
+    err.textContent = 'Upload a photo of your campus card.';
+    return;
+  }
 
-  const users = getUsers();
-  currentUser.studentId = card;
-  currentUser.cardPhotoName = photoInput.files[0].name;
-  currentUser.verified = 'pending';
-  users[currentUser.email] = currentUser;
-  saveUsers(users);
-
-  renderVerifyStatus();
-  renderUserSidebar();
-  showConfirmModal('🛡️', 'Under review', "We're checking your student ID against campus records — usually within a few hours.", 'Verification submitted');
-
-  /* Demo-only: simulates campus-records approval coming back, since there
-     is no real backend here to call. In a production build this would be
-     an admin action or a real ID-verification API response instead. */
-  setTimeout(()=>{
-    const u = getUsers();
-    if (u[currentUser.email] && u[currentUser.email].verified === 'pending'){
-      u[currentUser.email].verified = 'yes';
-      saveUsers(u);
-      if (currentUser.email === getSessionEmail()){
-        currentUser = u[currentUser.email];
-        renderVerifyStatus();
-        renderUserSidebar();
-      }
-    }
-  }, 4000);
+  try {
+    const formData = new FormData();
+    formData.append('student_id', studentId);
+    formData.append('document', photoInput.files[0]);
+    await apiFetch('/verification/submit', {
+      method: 'POST',
+      body: formData
+    });
+    await hydrateSession();
+    renderVerifyStatus();
+    renderUserSidebar();
+    showConfirmModal('🛡️', 'Under review', "Your verification request has been submitted. An admin will approve it in the dashboard queue.", 'Verification submitted');
+  } catch (error) {
+    err.textContent = error.message;
+  }
 }
 
 function guardVerified(){
-  if (!currentUser || currentUser.verified !== 'yes'){
+  if (!state.currentUser || (state.currentUser.verification_status || state.currentUser.verified || 'no') !== 'yes') {
     alert('You need to be a verified student to do this. Head to the Verification tab and submit your student ID.');
     go('verify');
     return false;
@@ -215,205 +351,172 @@ function guardVerified(){
   return true;
 }
 
-/* ================= RESOURCES ================= */
-const bgPalette = ['#EAF4EE','#FFE4DC','#FCEFD2','#E4ECFB','#CFEBDA'];
-function pickBg(){ return bgPalette[Math.floor(Math.random()*bgPalette.length)]; }
-const catLabel = { equip:'Equipment', books:'Books', space:'Spaces', skill:'Skills' };
+const bgPalette = ['#EAF4EE', '#FFE4DC', '#FCEFD2', '#E4ECFB', '#CFEBDA'];
+function pickBg(){ return bgPalette[Math.floor(Math.random() * bgPalette.length)]; }
+const catLabel = { equip: 'Equipment', books: 'Books', space: 'Spaces', skill: 'Skills' };
 const predictionData = [
-  {key:'projector', name:'Projector', demand:12, supply:5, period:'Next 7 days'},
-  {key:'dslr', name:'DSLR Camera', demand:8, supply:6, period:'Next 7 days'},
-  {key:'arduino', name:'Arduino Kit', demand:15, supply:10, period:'Next 7 days'},
-  {key:'microphone', name:'Microphone', demand:9, supply:4, period:'Next 7 days'},
-  {key:'tripod', name:'Tripod', demand:7, supply:3, period:'Next 7 days'}
+  { key: 'projector', name: 'Projector', demand: 12, supply: 5, period: 'Next 7 days' },
+  { key: 'dslr', name: 'DSLR Camera', demand: 8, supply: 6, period: 'Next 7 days' },
+  { key: 'arduino', name: 'Arduino Kit', demand: 15, supply: 10, period: 'Next 7 days' },
+  { key: 'microphone', name: 'Microphone', demand: 9, supply: 4, period: 'Next 7 days' },
+  { key: 'tripod', name: 'Tripod', demand: 7, supply: 3, period: 'Next 7 days' }
 ];
-const demoResources = [
-  {id:'demo-epson-projector', name:'Epson Projector', predictionKey:'projector', cat:'equip', sub:'HD projector · HDMI included', price:'₹150/day', priceValue:150, ic:'📽️', bg:'#EAF4EE', status:'idle', utilization:31, daysSinceUsed:10, activationOpportunity:'Medium', distanceKm:0.8, condition:'Excellent', reliability:96, durationDays:2},
-  {id:'demo-canon-dslr', name:'Canon DSLR', predictionKey:'dslr', cat:'equip', sub:'Canon EOS · 18-55mm lens', price:'₹120/day', priceValue:120, ic:'📷', bg:'#FFE4DC', status:'idle', utilization:22, daysSinceUsed:14, activationOpportunity:'High', distanceKm:1.4, condition:'Good', reliability:94, durationDays:2},
-  {id:'demo-arduino-kit', name:'Arduino Kit', predictionKey:'arduino', cat:'equip', sub:'Starter kit · sensors included', price:'₹60/day', priceValue:60, ic:'🔌', bg:'#FCEFD2', status:'available', utilization:54, daysSinceUsed:2, distanceKm:0.6, condition:'Excellent', reliability:91, durationDays:3},
-  {id:'demo-campus-microphone', name:'Campus Microphone', predictionKey:'microphone', cat:'equip', sub:'USB condenser microphone', price:'₹45/day', priceValue:45, ic:'🎙️', bg:'#E4ECFB', status:'available', utilization:48, daysSinceUsed:3, distanceKm:1.1, condition:'Good', reliability:89, durationDays:1},
-  {id:'demo-tripod', name:'Tripod', predictionKey:'tripod', cat:'equip', sub:'Lightweight camera tripod', price:'₹30/day', priceValue:30, ic:'📸', bg:'#CFEBDA', status:'available', utilization:39, daysSinceUsed:5, distanceKm:0.9, condition:'Good', reliability:92, durationDays:2}
-];
-
-function ensureDemoResources(){
-  if (localStorage.getItem(DEMO_SEEDED_KEY)==='true') return;
-  const resources = getResources();
-  const existingIds = new Set(resources.map(resource=>resource.id));
-  const additions = demoResources.filter(resource=>!existingIds.has(resource.id)).map(resource=>({
-    ...resource, ownerEmail:currentUser.email, demoResource:true, wasActivated:false
-  }));
-  if (additions.length) saveResources([...resources, ...additions]);
-  localStorage.setItem(DEMO_SEEDED_KEY,'true');
-}
-function resourceStatus(resource){ return resource.status || 'available'; }
-function predictionForResource(resource){
-  if (resource.predictionKey) return predictionData.find(item=>item.key===resource.predictionKey) || predictionData[0];
-  const name = `${resource.name} ${resource.sub}`.toLowerCase();
-  if (/dslr|camera/.test(name)) return predictionData[1];
-  if (/arduino/.test(name)) return predictionData[2];
-  if (/microphone|mic\b/.test(name)) return predictionData[3];
-  if (/tripod/.test(name)) return predictionData[4];
-  return predictionData[0];
-}
-function predictionSupply(prediction){
-  const activations = getResources().filter(resource=>resource.demoResource && resource.predictionKey===prediction.key && resource.wasActivated && resourceStatus(resource)==='available').length;
-  return prediction.supply + activations;
-}
-function predictedGap(prediction){ return Math.max(0, prediction.demand - predictionSupply(prediction)); }
-function matchScore(resource){
-  const availability = resourceStatus(resource)==='available' ? 12 : 0;
-  const condition = resource.condition==='Excellent' ? 12 : resource.condition==='Good' ? 8 : 3;
-  const distance = resource.distanceKm <= 1 ? 8 : resource.distanceKm <= 1.5 ? 6 : resource.distanceKm <= 3 ? 3 : 0;
-  const price = (resource.priceValue || 0) <= 60 ? 8 : (resource.priceValue || 0) <= 120 ? 6 : (resource.priceValue || 0) <= 150 ? 4 : 1;
-  const duration = (resource.durationDays || 1) <= 3 ? 3 : -2;
-  return Math.min(99, Math.round(50 + availability + condition + distance + price + duration + (resource.reliability || 85)*0.1));
-}
 
 function emptyState(msg){
   return `<div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--ink-400);font-size:13px;">${msg}</div>`;
 }
-function resCard(r){
-  const status = resourceStatus(r);
-  const bookable = status==='available';
+function escapeHtml(value){
+  return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+}
+function escapeAttr(value){ return String(value).replace(/'/g, ''); }
+
+function resCard(resource){
+  const status = resourceStatus(resource);
+  const bookable = status === 'available';
   return `<div class="res-card">
-    <div class="thumb" style="background:${r.bg};">${r.ic}</div>
+    <div class="thumb" style="background:${resource.bg || '#EAF4EE'};">${resource.ic || '📦'}</div>
     <div class="body">
-      <div class="t">${escapeHtml(r.name)}</div>
-      <div class="s">${escapeHtml(r.sub)}</div>
-      <div class="match-details"><span class="match-score">${Math.round(matchScore(r))}% Match</span><span class="status-pill ${status}">${status==='idle'?'Idle':status[0].toUpperCase()+status.slice(1)}</span></div>
-      <div class="resource-meta">${Number(r.distanceKm ?? 1).toFixed(1)} km · ${escapeHtml(r.condition || 'Good')} condition · ${r.reliability || 85}% reliable</div>
-      <div class="row"><span class="price">${escapeHtml(r.price || 'Free')}</span><button class="btn-book" ${bookable?'':'disabled'} onclick="openBooking('${escapeAttr(r.id)}','${escapeAttr(r.name)}','${escapeAttr(r.ic)}','${escapeAttr(r.sub)}')">${bookable?'Book':'Unavailable'}</button></div>
+      <div class="t">${escapeHtml(resource.name)}</div>
+      <div class="s">${escapeHtml(resource.sub || resource.description || '')}</div>
+      <div class="match-details"><span class="match-score">${matchScore(resource)}% Match</span><span class="status-pill ${status}">${status === 'idle' ? 'Idle' : status[0].toUpperCase() + status.slice(1)}</span></div>
+      <div class="resource-meta">${Number(resource.distanceKm || 1).toFixed(1)} km · ${escapeHtml(resource.condition || 'Good')} condition · ${resource.reliability || 85}% reliable</div>
+      <div class="row"><span class="price">${escapeHtml(resource.price || 'Free')}</span><button class="btn-book" ${bookable ? '' : 'disabled'} onclick="openBooking('${escapeAttr(resource.id)}','${escapeAttr(resource.name)}','${escapeAttr(resource.ic || '📦')}','${escapeAttr(resource.sub || resource.description || '')}')">${bookable ? 'Book' : 'Unavailable'}</button></div>
     </div>
   </div>`;
 }
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function escapeAttr(s){ return String(s).replace(/'/g,''); }
 
 function renderDashMatches(){
   const all = getResources();
-  const mine = all.filter(r=>r.ownerEmail === currentUser.email);
-  const others = all.filter(r=>(r.ownerEmail !== currentUser.email || r.demoResource) && resourceStatus(r)==='available')
-    .sort((a,b)=>matchScore(b)-matchScore(a)).slice(0,3);
+  const me = state.currentUser;
+  const others = all.filter((resource) => resource.ownerEmail !== me.email && resourceStatus(resource) === 'available')
+    .sort((a, b) => matchScore(b) - matchScore(a))
+    .slice(0, 3);
+
   document.getElementById('dash-matches').innerHTML = others.length ? others.map(resCard).join('') : emptyState('No matches yet');
-  document.getElementById('stat-shared').textContent = mine.length;
-  const bookings = getBookings().filter(booking=>booking.borrowerEmail===currentUser.email && booking.status==='active');
-  document.getElementById('stat-bookings').textContent = bookings.length;
-  document.getElementById('dash-shortages').textContent = predictionData.filter(predictedGap).length;
-  document.getElementById('dash-idle').textContent = all.filter(resource=>resourceStatus(resource)==='idle').length;
-  document.getElementById('dash-opportunities').textContent = all.filter(resource=>resourceStatus(resource)==='idle' && predictedGap(predictionForResource(resource))>0).length;
+  document.getElementById('stat-shared').textContent = all.filter((resource) => resource.ownerEmail === me.email).length;
+  const activeBookings = getBookings().filter((booking) => booking.borrower_id === me.id && booking.status === 'active');
+  document.getElementById('stat-bookings').textContent = activeBookings.length;
+  document.getElementById('dash-shortages').textContent = predictionData.filter((p) => predictedGap(p) > 0).length;
+  document.getElementById('dash-idle').textContent = all.filter((resource) => resourceStatus(resource) === 'idle').length;
+  document.getElementById('dash-opportunities').textContent = all.filter((resource) => resourceStatus(resource) === 'idle' && predictedGap(predictionForResource(resource)) > 0).length;
 }
 
-function renderFind(cat, query=''){
-  const all = getResources();
-  const normalizedQuery = query.trim().toLowerCase();
-  const list = all.filter(resource=>{
-    const matchesCategory = cat==='all' || resource.cat===cat;
-    const searchable = `${resource.name} ${resource.sub} ${catLabel[resource.cat] || resource.cat}`.toLowerCase();
-    return matchesCategory && (!normalizedQuery || searchable.includes(normalizedQuery));
-  }).sort((a,b)=>matchScore(b)-matchScore(a));
+function renderFind(cat = 'all', query = ''){
+  const list = getResources().filter((resource) => {
+    const categoryMatches = cat === 'all' || (resource.cat || resource.category) === cat;
+    const searchText = `${resource.name} ${resource.sub || resource.description || ''} ${catLabel[resource.cat || resource.category] || ''}`.toLowerCase();
+    const queryMatches = !query || searchText.includes(query.toLowerCase());
+    return categoryMatches && queryMatches;
+  }).sort((a, b) => matchScore(b) - matchScore(a));
+
   document.getElementById('find-grid').innerHTML = list.length ? list.map(resCard).join('') : emptyState('No resources found');
 }
-document.querySelectorAll('#filter-chips .chip').forEach(chip=>{
-  chip.addEventListener('click', ()=>{
-    document.querySelectorAll('#filter-chips .chip').forEach(c=>c.classList.remove('active'));
+
+document.querySelectorAll('#filter-chips .chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('#filter-chips .chip').forEach((item) => item.classList.remove('active'));
     chip.classList.add('active');
     renderFind(chip.dataset.cat, document.getElementById('global-search').value);
   });
 });
-document.getElementById('global-search').addEventListener('input', event=>{
+
+document.getElementById('global-search').addEventListener('input', (event) => {
   renderFind(document.querySelector('#filter-chips .chip.active')?.dataset.cat || 'all', event.target.value);
 });
-document.getElementById('global-search').addEventListener('keydown', event=>{
-  if (event.key==='Enter') go('find');
-});
 
-function ownerRow(r){
-  const status = resourceStatus(r);
-  const prediction = predictionForResource(r);
-  const lastUsed = r.lastUsedAt ? 'Today' : r.daysSinceUsed === undefined ? 'Not used yet' : `${r.daysSinceUsed} days ago`;
-  return `<div class="owner-row">
-    <div class="ic" style="background:${r.bg};">${r.ic}</div>
-    <div class="info"><div class="t">${escapeHtml(r.name)}</div><div class="s">${catLabel[r.cat]||r.cat} · ${escapeHtml(r.price || 'Free')} · ${r.utilization || 0}% utilized · Last used ${lastUsed} · Predicted demand ${prediction.demand}</div></div>
-    <div class="row-actions">
-      <span class="status-pill ${status}">${status==='idle'?'Idle':status==='suggested'?'Activation suggested':status[0].toUpperCase()+status.slice(1)}</span>
-      ${status==='idle' && predictedGap(prediction)>0 ? `<button class="btn-book" onclick="activateResource('${escapeAttr(r.id)}')">Activate</button>` : ''}
-      <button class="icon-del" title="Remove listing" onclick="deleteResource('${r.id}')">✕</button>
-    </div>
-  </div>`;
-}
-function renderOwnerList(){
-  const mine = getResources().filter(r=>r.ownerEmail === currentUser.email);
-  const idle = mine.filter(resource=>resourceStatus(resource)==='idle');
-  document.getElementById('idle-resource-list').innerHTML = idle.length
-    ? idle.map(activationCard).join('')
-    : `<div class="idle-card"><span class="ic">✓</span><div><div class="t">No idle resources detected</div><div class="s">Available and booked resources are reflected in your listings below.</div></div></div>`;
-  document.getElementById('owner-list').innerHTML = mine.length
-    ? mine.map(ownerRow).join('')
-    : `<div class="owner-row"><div class="ic" style="background:var(--mint-50);">📦</div><div class="info"><div class="t">No resources listed yet</div><div class="s">Add a resource to start lending it out</div></div></div>`;
-}
+document.getElementById('global-search').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') go('find');
+});
 
 function activationCard(resource){
   const prediction = predictionForResource(resource);
   const gap = predictedGap(prediction);
-  const level = gap>=5?'High':'Medium';
-  const unitLabel = {projector:'projectors',dslr:'DSLR cameras',arduino:'Arduino kits',microphone:'microphones',tripod:'tripods'}[prediction.key] || 'resources';
+  const level = gap >= 5 ? 'High' : 'Medium';
   return `<div class="activation-card">
     <div class="activation-copy"><div class="t">${level} demand for ${escapeHtml(prediction.name)} predicted.</div>
-      <div class="s">Your ${escapeHtml(resource.name)} has been idle for ${resource.daysSinceUsed ?? 0} days.</div>
-      <div class="s">${gap} additional ${unitLabel} may be required · ${resource.utilization || 0}% utilization · ${resource.activationOpportunity || 'Medium'} activation opportunity</div>
+      <div class="s">Your ${escapeHtml(resource.name)} has been idle and may be needed soon.</div>
+      <div class="s">${gap} additional resources may be required · ${resource.utilization || 0}% utilization</div>
     </div>
     <div class="activation-actions"><button class="btn-book" onclick="activateResource('${escapeAttr(resource.id)}')">Activate Resource</button><button class="btn-ghost" onclick="dismissActivation('${escapeAttr(resource.id)}')">Not Now</button></div>
   </div>`;
 }
 
-function renderPredictions(){
-  document.getElementById('prediction-grid').innerHTML = predictionData.map(prediction=>{
-    const supply = predictionSupply(prediction);
-    const gap = Math.max(0,prediction.demand-supply);
-    const level = gap>=5?'High':gap>0?'Medium':'Low';
-    return `<div class="prediction-card ${gap>0?'shortage':''}"><div class="prediction-card-head"><strong>${prediction.name}</strong><span class="status-pill ${gap>0?'idle':'available'}">${level} demand</span></div>
-      <div class="prediction-numbers"><div><span>Predicted demand</span><strong>${prediction.demand}</strong></div><div><span>Current supply</span><strong>${supply}</strong></div><div><span>Supply gap</span><strong>${gap}</strong></div></div>
-      <div class="prediction-period">${prediction.period} · ${gap>0?'Shortage predicted':'Supply meets demand'}</div></div>`;
-  }).join('');
-  document.getElementById('gap-list').innerHTML = predictionData.map(prediction=>{
-    const gap = predictedGap(prediction);
-    const percent = Math.round(gap/prediction.demand*100);
-    return `<div class="gap-row ${gap>0?'gap-warning':''}"><div class="cat">${prediction.name}</div><div class="gap-bar-track"><div class="gap-bar-fill" style="width:${percent}%;"></div></div><div class="gap-pct">${gap} short</div></div>`;
-  }).join('');
-  const idle = getResources().filter(resource=>resourceStatus(resource)==='idle' && predictedGap(predictionForResource(resource))>0);
-  document.getElementById('activation-alerts').innerHTML = idle.length ? idle.map(activationCard).join('') : `<div class="empty-alert">No idle resources are currently eligible for activation.</div>`;
+function ownerRow(resource){
+  const status = resourceStatus(resource);
+  const prediction = predictionForResource(resource);
+  return `<div class="owner-row">
+    <div class="ic" style="background:${resource.bg || '#EAF4EE'};">${resource.ic || '📦'}</div>
+    <div class="info"><div class="t">${escapeHtml(resource.name)}</div><div class="s">${catLabel[resource.cat || resource.category] || resource.category} · ${escapeHtml(resource.price || 'Free')} · ${resource.utilization || 0}% utilized · Predicted demand ${prediction.demand}</div></div>
+    <div class="row-actions">
+      <span class="status-pill ${status}">${status === 'idle' ? 'Idle' : status[0].toUpperCase() + status.slice(1)}</span>
+      ${status === 'idle' && predictedGap(prediction) > 0 ? `<button class="btn-book" onclick="activateResource('${escapeAttr(resource.id)}')">Activate</button>` : ''}
+      <button class="icon-del" title="Remove listing" onclick="deleteResource('${resource.id}')">✕</button>
+    </div>
+  </div>`;
 }
 
-function activateResource(id){
-  const resources = getResources();
-  const resource = resources.find(item=>item.id===id);
-  if (!resource || resourceStatus(resource)!=='idle') return;
-  resource.status = 'available';
-  resource.wasActivated = true;
-  saveResources(resources);
-  refreshEverything();
-  showConfirmModal('✅','Resource activated','Resource activated successfully. It is now available for booking.','Activation complete');
+function renderOwnerList(){
+  const mine = getResources().filter((resource) => resource.ownerEmail === state.currentUser.email || resource.owner_id === state.currentUser.id);
+  const idle = mine.filter((resource) => resourceStatus(resource) === 'idle');
+  document.getElementById('idle-resource-list').innerHTML = idle.length ? idle.map(activationCard).join('') : `<div class="idle-card"><span class="ic">✓</span><div><div class="t">No idle resources detected</div><div class="s">Available and booked resources are reflected in your listings below.</div></div></div>`;
+  document.getElementById('owner-list').innerHTML = mine.length ? mine.map(ownerRow).join('') : `<div class="owner-row"><div class="ic" style="background:var(--mint-50);">📦</div><div class="info"><div class="t">No resources listed yet</div><div class="s">Add a resource to start lending it out</div></div></div>`;
+}
+
+function renderPredictions(){
+  document.getElementById('prediction-grid').innerHTML = predictionData.map((prediction) => {
+    const supply = prediction.supply;
+    const gap = Math.max(0, prediction.demand - supply);
+    const level = gap >= 5 ? 'High' : gap > 0 ? 'Medium' : 'Low';
+    return `<div class="prediction-card ${gap > 0 ? 'shortage' : ''}"><div class="prediction-card-head"><strong>${prediction.name}</strong><span class="status-pill ${gap > 0 ? 'idle' : 'available'}">${level} demand</span></div>
+      <div class="prediction-numbers"><div><span>Predicted demand</span><strong>${prediction.demand}</strong></div><div><span>Current supply</span><strong>${supply}</strong></div><div><span>Supply gap</span><strong>${gap}</strong></div></div>
+      <div class="prediction-period">${prediction.period} · ${gap > 0 ? 'Shortage predicted' : 'Supply meets demand'}</div></div>`;
+  }).join('');
+
+  document.getElementById('gap-list').innerHTML = predictionData.map((prediction) => {
+    const gap = predictedGap(prediction);
+    const percent = Math.round((gap / prediction.demand) * 100 || 0);
+    return `<div class="gap-row ${gap > 0 ? 'gap-warning' : ''}"><div class="cat">${prediction.name}</div><div class="gap-bar-track"><div class="gap-bar-fill" style="width:${percent}%;"></div></div><div class="gap-pct">${gap} short</div></div>`;
+  }).join('');
+
+  const idle = getResources().filter((resource) => resourceStatus(resource) === 'idle' && predictedGap(predictionForResource(resource)) > 0);
+  document.getElementById('activation-alerts').innerHTML = idle.length ? idle.map(activationCard).join('') : '<div class="empty-alert">No idle resources are currently eligible for activation.</div>';
+}
+
+async function activateResource(id){
+  try {
+    await apiFetch(`/resources/${id}/activate`, { method: 'POST' });
+    await hydrateSession();
+    renderUserSidebar();
+    refreshEverything();
+    showConfirmModal('✅', 'Resource activated', 'Resource activated successfully. It is now available for booking.', 'Activation complete');
+  } catch (error) {
+    showConfirmModal('⚠️', 'Activation failed', error.message, 'Try again');
+  }
 }
 
 function dismissActivation(id){
-  const resources = getResources();
-  const resource = resources.find(item=>item.id===id);
+  const resource = getResources().find((item) => item.id === String(id));
   if (!resource) return;
   resource.status = 'suggested';
-  saveResources(resources);
+  saveResources(getResources());
   refreshEverything();
 }
 
-function deleteResource(id){
-  const list = getResources().filter(r=>r.id !== id);
-  saveResources(list);
-  refreshEverything();
+async function deleteResource(id){
+  try {
+    await apiFetch(`/resources/${id}`, { method: 'DELETE' });
+    await hydrateSession();
+    refreshEverything();
+  } catch (error) {
+    showConfirmModal('⚠️', 'Delete failed', error.message, 'Try again');
+  }
 }
 
 function renderAdminStats(){
   const all = getResources();
-  const users = getUsers();
-  document.getElementById('admin-total-res').textContent = all.length;
-  document.getElementById('admin-verified-count').textContent = Object.values(users).filter(u=>u.verified==='yes').length;
+  const analytics = state.analytics || {};
+  document.getElementById('admin-total-res').textContent = all.length || analytics.total_resources || 0;
+  document.getElementById('admin-verified-count').textContent = analytics.verified_students || Object.values(getUsers()).filter((user) => user.verified === 'yes').length || 0;
 }
 
 function refreshEverything(){
@@ -426,7 +529,6 @@ function refreshEverything(){
   renderBookings();
 }
 
-/* ---------- add-resource modal ---------- */
 function openResourceModal(){
   if (!guardVerified()) return;
   document.getElementById('res-name').value = '';
@@ -437,7 +539,8 @@ function openResourceModal(){
   document.getElementById('res-error').textContent = '';
   openModal('resource-modal');
 }
-function submitResource(){
+
+async function submitResource(){
   const name = document.getElementById('res-name').value.trim();
   const cat = document.getElementById('res-cat').value;
   const desc = document.getElementById('res-desc').value.trim();
@@ -446,102 +549,105 @@ function submitResource(){
   const err = document.getElementById('res-error');
   err.textContent = '';
 
-  if (!name || !desc){ err.textContent = 'Give it a name and a short description.'; return; }
+  if (!name || !desc) {
+    err.textContent = 'Give it a name and a short description.';
+    return;
+  }
 
-  const list = getResources();
-  list.push({
-    id: 'r' + Date.now() + Math.floor(Math.random()*1000),
-    name, cat, sub: desc, price, ic: icon,
-    bg: pickBg(),
-    ownerEmail: currentUser.email, status:'available', utilization:0,
-    distanceKm:0.8, condition:'Good', reliability:85, durationDays:1
-  });
-  saveResources(list);
-  closeModal('resource-modal');
-  refreshEverything();
-  go('owner');
+  try {
+    await apiFetch('/resources', {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        category: cat,
+        description: desc,
+        price_per_day: price,
+        deposit: '',
+        condition: 'Good',
+        location: 'Campus',
+        icon,
+        color: pickBg(),
+        status: 'available'
+      })
+    });
+    closeModal('resource-modal');
+    await hydrateSession();
+    refreshEverything();
+    go('owner');
+  } catch (error) {
+    err.textContent = error.message;
+  }
 }
+
 document.getElementById('add-resource-btn').addEventListener('click', openResourceModal);
 
-/* ================= NAV ================= */
-const views = ['dashboard','find','owner','bookings','admin','verify'];
+const views = ['dashboard', 'find', 'owner', 'bookings', 'admin', 'verify'];
 function go(view){
-  views.forEach(v=>document.getElementById('view-'+v).classList.remove('active'));
-  document.getElementById('view-'+view).classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===view));
+  views.forEach((item) => document.getElementById('view-' + item).classList.remove('active'));
+  document.getElementById('view-' + view).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach((navItem) => navItem.classList.toggle('active', navItem.dataset.view === view));
   document.getElementById('sidebar').classList.remove('open');
-  window.scrollTo({top:0,behavior:'smooth'});
-  if (view==='find') renderFind(document.querySelector('#filter-chips .chip.active')?.dataset.cat || 'all', document.getElementById('global-search').value);
-  if (view==='owner') renderOwnerList();
-  if (view==='admin') renderAdminStats();
-  if (view==='verify') renderVerifyStatus();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (view === 'find') renderFind(document.querySelector('#filter-chips .chip.active')?.dataset.cat || 'all', document.getElementById('global-search').value);
+  if (view === 'owner') renderOwnerList();
+  if (view === 'admin') renderAdminStats();
+  if (view === 'verify') renderVerifyStatus();
 }
-document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click', ()=>go(n.dataset.view)));
-document.querySelectorAll('[data-goto]').forEach(n=>n.addEventListener('click', ()=>go(n.dataset.goto)));
 
-document.getElementById('hamburger').addEventListener('click', ()=>{
+document.querySelectorAll('.nav-item').forEach((item) => item.addEventListener('click', () => go(item.dataset.view)));
+document.querySelectorAll('[data-goto]').forEach((item) => item.addEventListener('click', () => go(item.dataset.goto)));
+
+document.getElementById('hamburger').addEventListener('click', () => {
   document.getElementById('sidebar').classList.toggle('open');
 });
 
-/* role switch */
-document.getElementById('role-student').addEventListener('click', ()=>{
+document.getElementById('role-student').addEventListener('click', () => {
   document.getElementById('role-student').classList.add('active');
   document.getElementById('role-admin').classList.remove('active');
-  document.getElementById('nav-student').style.display='flex';
-  document.getElementById('nav-admin').style.display='none';
+  document.getElementById('nav-student').style.display = 'flex';
+  document.getElementById('nav-admin').style.display = 'none';
   go('dashboard');
 });
-document.getElementById('role-admin').addEventListener('click', ()=>{
+
+document.getElementById('role-admin').addEventListener('click', () => {
   document.getElementById('role-admin').classList.add('active');
   document.getElementById('role-student').classList.remove('active');
-  document.getElementById('nav-student').style.display='none';
-  document.getElementById('nav-admin').style.display='flex';
+  document.getElementById('nav-student').style.display = 'none';
+  document.getElementById('nav-admin').style.display = 'flex';
   go('admin');
 });
 
-/* booking tabs */
-document.querySelectorAll('[data-btab]').forEach(b=>{
-  b.addEventListener('click', ()=>{
-    document.querySelectorAll('[data-btab]').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active');
-    document.getElementById('bookings-upcoming').style.display = b.dataset.btab==='upcoming'?'block':'none';
-    document.getElementById('bookings-past').style.display = b.dataset.btab==='past'?'block':'none';
+document.querySelectorAll('[data-btab]').forEach((button) => {
+  button.addEventListener('click', () => {
+    document.querySelectorAll('[data-btab]').forEach((item) => item.classList.remove('active'));
+    button.classList.add('active');
+    document.getElementById('bookings-upcoming').style.display = button.dataset.btab === 'upcoming' ? 'block' : 'none';
+    document.getElementById('bookings-past').style.display = button.dataset.btab === 'past' ? 'block' : 'none';
   });
 });
 
 function renderBookings(){
-  if (!currentUser) return;
-  const bookings = getBookings().filter(booking=>booking.borrowerEmail===currentUser.email);
-  const upcoming = bookings.filter(booking=>booking.status==='active');
-  const past = bookings.filter(booking=>booking.status==='returned');
-  document.getElementById('bookings-upcoming').innerHTML = upcoming.length ? upcoming.map(booking=>`
-    <div class="booking-card"><div class="ic" style="background:var(--mint-50);">📅</div><div class="info"><div class="t">${escapeHtml(booking.resourceName)}</div><div class="s">Booked · Resource status: Booked</div></div><div class="actions"><button class="btn-return" onclick="openReturn('${escapeAttr(booking.id)}','${escapeAttr(booking.resourceName)}')">Return</button></div></div>`).join('')
-    : `<div class="booking-card"><div class="ic" style="background:var(--mint-50);">📅</div><div class="info"><div class="t">No upcoming bookings</div><div class="s">Resources you book will show up here</div></div></div>`;
-  document.getElementById('bookings-past').innerHTML = past.length ? past.map(booking=>`
-    <div class="booking-card"><div class="ic" style="background:var(--mint-50);">✅</div><div class="info"><div class="t">${escapeHtml(booking.resourceName)}</div><div class="s">Returned · Resource is available again</div></div></div>`).join('')
-    : `<div class="booking-card"><div class="ic" style="background:var(--mint-50);">📅</div><div class="info"><div class="t">No past bookings</div><div class="s">Completed bookings will appear here</div></div></div>`;
+  if (!state.currentUser) return;
+  const bookings = getBookings().filter((booking) => booking.borrower_id === state.currentUser.id || booking.borrowerEmail === state.currentUser.email);
+  const upcoming = bookings.filter((booking) => booking.status === 'active');
+  const past = bookings.filter((booking) => booking.status === 'returned');
+  document.getElementById('bookings-upcoming').innerHTML = upcoming.length ? upcoming.map((booking) => `
+    <div class="booking-card"><div class="ic" style="background:var(--mint-50);">📅</div><div class="info"><div class="t">${escapeHtml(booking.resource_name || booking.resourceName || 'Resource')}</div><div class="s">Booked · Resource status: ${booking.status}</div></div><div class="actions"><button class="btn-return" onclick="openReturn('${escapeAttr(booking.id)}','${escapeAttr(booking.resource_name || booking.resourceName || 'Resource')}')">Return</button></div></div>`).join('') : `<div class="booking-card"><div class="ic" style="background:var(--mint-50);">📅</div><div class="info"><div class="t">No upcoming bookings</div><div class="s">Resources you book will show up here</div></div></div>`;
+  document.getElementById('bookings-past').innerHTML = past.length ? past.map((booking) => `
+    <div class="booking-card"><div class="ic" style="background:var(--mint-50);">✅</div><div class="info"><div class="t">${escapeHtml(booking.resource_name || booking.resourceName || 'Resource')}</div><div class="s">Returned · Resource is available again</div></div></div>`).join('') : `<div class="booking-card"><div class="ic" style="background:var(--mint-50);">📅</div><div class="info"><div class="t">No past bookings</div><div class="s">Completed bookings will appear here</div></div></div>`;
 }
 
-document.getElementById('notifications-btn').addEventListener('click', ()=>{
-  const messages = [];
-  const shortages = predictionData.filter(prediction=>predictedGap(prediction)>0);
-  if (shortages.length) messages.push(`${shortages[0].name} shortage predicted for next week.`);
-  const idleCamera = getResources().find(resource=>resourceStatus(resource)==='idle' && predictionForResource(resource).key==='dslr');
-  if (idleCamera) messages.push(`Your idle ${idleCamera.name} can satisfy upcoming demand.`);
-  if (getResources().some(resource=>resourceStatus(resource)==='available' && matchScore(resource)>=90)) messages.push('New high-match resource available near you.');
-  showConfirmModal('🔔','Smart alerts',messages.join('\n') || 'No new smart alerts.','Campus notifications');
+document.getElementById('notifications-btn').addEventListener('click', () => {
+  const messages = state.notifications.slice(0, 3).map((item) => item.message);
+  showConfirmModal('🔔', 'Smart alerts', messages.length ? messages.join('\n') : 'No new smart alerts.', 'Campus notifications');
 });
 
-/* ================= MODALS ================= */
 function openModal(id){ document.getElementById(id).classList.add('open'); }
-function closeModal(id){
-  document.getElementById(id).classList.remove('open');
-  if (document.getElementById('bm-confirm')) document.getElementById('bm-confirm').style.display='none';
-  document.querySelector('#booking-modal .modal > *:not(.modal-head):not(#bm-confirm)') && showBookingForm();
-  if (document.getElementById('rm-confirm')) document.getElementById('rm-confirm').style.display='none';
-}
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+
 let activeBookingResourceId = null;
 let activeReturnBookingId = null;
+
 function openBooking(id, name, ic, sub){
   if (!guardVerified()) return;
   activeBookingResourceId = id;
@@ -552,55 +658,62 @@ function openBooking(id, name, ic, sub){
   showBookingForm();
   openModal('booking-modal');
 }
+
 function showBookingForm(){
-  document.querySelectorAll('#booking-modal .f-label, #booking-modal .f-input, #booking-modal .btn-primary, #booking-modal .modal-res').forEach(el=>el.style.display='');
-  document.getElementById('bm-confirm').style.display='none';
+  document.querySelectorAll('#booking-modal .f-label, #booking-modal .f-input, #booking-modal .btn-primary, #booking-modal .modal-res').forEach((el) => { el.style.display = ''; });
+  document.getElementById('bm-confirm').style.display = 'none';
 }
-function showBookingConfirm(){
-  const resources = getResources();
-  const resource = resources.find(item=>item.id===activeBookingResourceId);
-  if (!resource || resourceStatus(resource)!=='available'){
+
+async function showBookingConfirm(){
+  const resource = getResources().find((item) => item.id === String(activeBookingResourceId));
+  if (!resource || resourceStatus(resource) !== 'available') {
     closeModal('booking-modal');
-    showConfirmModal('⚠️','Resource unavailable','This resource is no longer available. Refresh the results and choose another match.','Booking not completed');
+    showConfirmModal('⚠️', 'Resource unavailable', 'This resource is no longer available. Refresh the results and choose another match.', 'Booking not completed');
     return;
   }
-  resource.status = 'booked';
-  resource.utilization = Math.min(100,(resource.utilization || 0)+5);
-  saveResources(resources);
-  const bookings = getBookings();
-  bookings.push({id:'b'+Date.now(),resourceId:resource.id,resourceName:resource.name,borrowerEmail:currentUser.email,ownerEmail:resource.ownerEmail,status:'active'});
-  saveBookings(bookings);
-  document.querySelectorAll('#booking-modal .f-label, #booking-modal .f-input, #booking-modal .btn-primary, #booking-modal .modal-res').forEach(el=>el.style.display='none');
-  document.getElementById('bm-confirm').style.display='block';
-  refreshEverything();
+
+  try {
+    await apiFetch('/bookings', {
+      method: 'POST',
+      body: JSON.stringify({
+        resource_id: Number(activeBookingResourceId),
+        pickup_point: 'Main campus hub',
+        price: resource.price || 'Free',
+        deposit: ''
+      })
+    });
+    document.querySelectorAll('#booking-modal .f-label, #booking-modal .f-input, #booking-modal .btn-primary, #booking-modal .modal-res').forEach((el) => { el.style.display = 'none'; });
+    document.getElementById('bm-confirm').style.display = 'block';
+    await hydrateSession();
+    refreshEverything();
+  } catch (error) {
+    showConfirmModal('⚠️', 'Booking failed', error.message, 'Try again');
+  }
 }
-function openReturn(bookingId,name){
+
+function openReturn(bookingId, name){
   activeReturnBookingId = bookingId;
   document.getElementById('rm-name').textContent = name;
-  document.querySelectorAll('#return-modal .step-row, #return-modal .btn-primary, #return-modal .modal-res').forEach(el=>el.style.display='');
-  document.getElementById('rm-confirm').style.display='none';
+  document.querySelectorAll('#return-modal .step-row, #return-modal .btn-primary, #return-modal .modal-res').forEach((el) => { el.style.display = ''; });
+  document.getElementById('rm-confirm').style.display = 'none';
   openModal('return-modal');
 }
+
 function toggleStep(el){ el.classList.toggle('done'); }
-function showReturnConfirm(){
-  const bookings = getBookings();
-  const booking = bookings.find(item=>item.id===activeReturnBookingId);
-  if (booking){
-    booking.status = 'returned';
-    const resources = getResources();
-    const resource = resources.find(item=>item.id===booking.resourceId);
-    if (resource){
-      resource.status = 'available';
-      resource.lastUsedAt = Date.now();
-      resource.daysSinceUsed = 0;
-    }
-    saveBookings(bookings);
-    saveResources(resources);
+
+async function showReturnConfirm(){
+  if (!activeReturnBookingId) return;
+  try {
+    await apiFetch(`/bookings/${activeReturnBookingId}/return`, { method: 'POST' });
+    document.querySelectorAll('#return-modal .step-row, #return-modal .btn-primary, #return-modal .modal-res').forEach((el) => { el.style.display = 'none'; });
+    document.getElementById('rm-confirm').style.display = 'block';
+    await hydrateSession();
+    refreshEverything();
+  } catch (error) {
+    showConfirmModal('⚠️', 'Return failed', error.message, 'Try again');
   }
-  document.querySelectorAll('#return-modal .step-row, #return-modal .btn-primary, #return-modal .modal-res').forEach(el=>el.style.display='none');
-  document.getElementById('rm-confirm').style.display='block';
-  refreshEverything();
 }
+
 function showConfirmModal(icon, heading, body, title){
   document.getElementById('confirm-modal-title').textContent = title || 'Submitted';
   document.getElementById('confirm-modal-ic').textContent = icon || '✅';
@@ -609,22 +722,16 @@ function showConfirmModal(icon, heading, body, title){
   openModal('confirm-modal');
 }
 
-document.querySelectorAll('.modal-overlay').forEach(ov=>{
-  ov.addEventListener('click', (e)=>{ if(e.target===ov) ov.classList.remove('open'); });
+document.querySelectorAll('.modal-overlay').forEach((overlay) => {
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) overlay.classList.remove('open');
+  });
 });
 
-/* ================= BOOT ================= */
-(function boot(){
-  const email = getSessionEmail();
-  const users = getUsers();
-  if (email && users[email]){
-    currentUser = users[email];
-    ensureDemoResources();
-    document.getElementById('auth-overlay').style.display = 'none';
-    document.getElementById('app-root').style.display = 'flex';
-    renderUserSidebar();
-    renderVerifyStatus();
-    refreshEverything();
+(async function boot(){
+  const token = getSessionToken();
+  if (token) {
+    await enterApp();
   } else {
     document.getElementById('auth-overlay').style.display = 'flex';
     document.getElementById('app-root').style.display = 'none';
