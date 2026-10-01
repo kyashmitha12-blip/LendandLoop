@@ -134,11 +134,18 @@ class Verification(db.Model):
     verified_by = db.Column(db.Integer, nullable=True)
 
     def to_dict(self):
+        doc_url = ""
+        if self.document_path:
+            clean_name = self.document_path.replace("\\", "/").split("/")[-1]
+            doc_url = f"/uploads/{clean_name}"
+
         return {
             "id": self.id,
             "user_id": self.user_id,
+            "student_name": self.user.name if self.user else "Student",
+            "student_email": self.user.email if self.user else "",
             "student_id": self.student_id,
-            "document_path": self.document_path,
+            "document_path": doc_url,
             "status": self.status,
             "submitted_at": self.submitted_at.isoformat() if self.submitted_at else None,
             "verified_at": self.verified_at.isoformat() if self.verified_at else None,

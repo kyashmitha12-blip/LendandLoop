@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from functools import wraps
 
 import jwt
 from flask import Blueprint, jsonify, request
@@ -22,6 +23,7 @@ def create_token(user):
 
 
 def auth_required(view_func):
+    @wraps(view_func)
     def decorated(*args, **kwargs):
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
@@ -37,7 +39,6 @@ def auth_required(view_func):
         request.current_user = user
         return view_func(*args, **kwargs)
 
-    decorated.__name__ = view_func.__name__
     return decorated
 
 

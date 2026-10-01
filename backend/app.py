@@ -6,13 +6,14 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from flask import Flask, send_file
+from flask import Flask, send_file, send_from_directory
 from werkzeug.security import generate_password_hash
 
 from backend.config import Config
 from backend.database import db
 from backend.models import Booking, Notification, Prediction, Resource, User, Verification
 from backend.routes.admin_routes import admin_bp
+from backend.routes.ai_routes import ai_bp
 from backend.routes.auth_routes import auth_bp
 from backend.routes.booking_routes import booking_bp
 from backend.routes.notification_routes import notification_bp
@@ -36,16 +37,23 @@ def create_app():
     app.register_blueprint(notification_bp)
     app.register_blueprint(prediction_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(ai_bp)
 
     @app.route("/")
     @app.route("/index.html")
     def serve_index():
         return send_file(ROOT / "index.html")
 
+    @app.route("/uploads/<path:filename>")
+    @app.route("/backend/uploads/<path:filename>")
+    def serve_upload(filename):
+        upload_dir = Path(Config.UPLOAD_FOLDER)
+        return send_from_directory(upload_dir, filename)
+
     @app.route("/<path:path>")
     def serve_path(path):
         candidate = (ROOT / path).resolve()
-        if candidate.exists() and candidate.is_file() and ROOT in candidate.parents or candidate == ROOT:
+        if candidate.exists() and candidate.is_file() and (ROOT in candidate.parents or candidate == ROOT):
             return send_file(candidate)
         return send_file(ROOT / "index.html")
 
@@ -152,6 +160,60 @@ def seed_demo_data():
             color="#CFEBDA",
             distance_km=0.9,
             reliability=90,
+            duration_days=1,
+        ),
+        Resource(
+            owner_id=student.id,
+            name="Casio Scientific Calculator",
+            category="equip",
+            description="fx-991EX Classwiz with matrix and vector solver",
+            price_per_day="₹25/day",
+            deposit="₹100",
+            condition="Excellent",
+            location="Block C, Room 204",
+            status="available",
+            utilization=40,
+            last_used=None,
+            icon="🔢",
+            color="#E4ECFB",
+            distance_km=0.4,
+            reliability=98,
+            duration_days=2,
+        ),
+        Resource(
+            owner_id=student.id,
+            name="GATE Prep Guide & Engineering Maths",
+            category="books",
+            description="Complete 2025 Edition with solved papers & formula sheets",
+            price_per_day="₹30/day",
+            deposit="₹150",
+            condition="Good",
+            location="Central Library",
+            status="available",
+            utilization=60,
+            last_used=None,
+            icon="📚",
+            color="#FCEFD2",
+            distance_km=0.7,
+            reliability=92,
+            duration_days=5,
+        ),
+        Resource(
+            owner_id=admin.id,
+            name="Podcast & Audio Recording Studio",
+            category="space",
+            description="Soundproof booth with Shure SM7B mic and mixer",
+            price_per_day="₹120/day",
+            deposit="₹400",
+            condition="Excellent",
+            location="Media Complex",
+            status="available",
+            utilization=45,
+            last_used=None,
+            icon="🎙️",
+            color="#FFE4DC",
+            distance_km=1.2,
+            reliability=95,
             duration_days=1,
         ),
     ]

@@ -25,7 +25,8 @@ const state = {
   resources: [],
   bookings: [],
   notifications: [],
-  analytics: {}
+  analytics: {},
+  predictions: []   // live from /api/predictions
 };
 
 const USERS_KEY = 'll_users';
@@ -115,13 +116,18 @@ function normalizeResource(resource){
 function resourceStatus(resource){ return resource?.status || 'available'; }
 function predictionForResource(resource){
   const name = `${resource.name || ''} ${resource.sub || ''}`.toLowerCase();
-  if (/dslr|camera/.test(name)) return { key: 'dslr', name: 'DSLR Camera', demand: 8, supply: 6, period: 'Next 7 days' };
-  if (/arduino/.test(name)) return { key: 'arduino', name: 'Arduino Kit', demand: 15, supply: 10, period: 'Next 7 days' };
-  if (/microphone|mic\b/.test(name)) return { key: 'microphone', name: 'Microphone', demand: 9, supply: 4, period: 'Next 7 days' };
-  if (/tripod/.test(name)) return { key: 'tripod', name: 'Tripod', demand: 7, supply: 3, period: 'Next 7 days' };
-  return { key: 'projector', name: 'Projector', demand: 12, supply: 5, period: 'Next 7 days' };
+  const predictions = getPredictions();
+  if (/dslr|camera/.test(name)) return predictions.find(p => p.key === 'dslr') || predictions[0];
+  if (/arduino/.test(name)) return predictions.find(p => p.key === 'arduino') || predictions[0];
+  if (/microphone|mic\b/.test(name)) return predictions.find(p => p.key === 'microphone') || predictions[0];
+  if (/tripod/.test(name)) return predictions.find(p => p.key === 'tripod') || predictions[0];
+  return predictions.find(p => p.key === 'projector') || predictions[0];
 }
-function predictedGap(prediction){ return Math.max(0, prediction.demand - prediction.supply); }
+function predictedGap(prediction){
+  // Use pre-computed gap from API if available, otherwise calculate
+  if (prediction.gap !== undefined) return prediction.gap;
+  return Math.max(0, (prediction.demand || 0) - (prediction.supply || 0));
+}
 function matchScore(resource){
   const availability = resourceStatus(resource) === 'available' ? 12 : 0;
   const condition = resource.condition === 'Excellent' ? 12 : resource.condition === 'Good' ? 8 : 3;
@@ -175,6 +181,21 @@ async function hydrateSession(){
     state.notifications = [];
   }
 
+  try {
+    const predictData = await apiFetch('/predictions');
+    state.predictions = (predictData.predictions || []).map(p => ({
+      key: p.resource_category,
+      name: p.display_name || p.resource_category,
+      demand: p.predicted_demand,
+      supply: p.current_supply,
+      gap: p.supply_gap,
+      level: p.demand_level,
+      period: p.prediction_period || 'Next 7 days'
+    }));
+  } catch (error) {
+    // Keep existing predictions on error
+  }
+
   if (state.currentUser && state.currentUser.role === 'admin') {
     try {
       const analyticsData = await apiFetch('/admin/analytics');
@@ -182,6 +203,42 @@ async function hydrateSession(){
     } catch (error) {
       state.analytics = {};
     }
+  }
+}
+
+function switchAuthTab(tab){
+  document.getElementById('atab-login').classList.toggle('active', tab === 'login');
+  document.getElementById('atab-signup').classList.toggle('active', tab === 'signup');
+  document.getElementById('auth-login').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('auth-signup').style.display = tab === 'signup' ? 'block' : 'none';
+  document.getElementById('login-error').textContent = '';
+  document.getElementById('signup-error').textContent = '';
+}
+
+function switchPortal(portal){
+  const studentBtn = document.getElementById('ptab-student');
+  const adminBtn = document.getElementById('ptab-admin');
+  const studentSec = document.getElementById('portal-student-section');
+  const adminSec = document.getElementById('portal-admin-section');
+  
+  if (portal === 'admin') {
+    adminBtn.classList.add('active');
+    adminBtn.style.background = 'var(--green-500)';
+    adminBtn.style.color = '#fff';
+    studentBtn.classList.remove('active');
+    studentBtn.style.background = 'transparent';
+    studentBtn.style.color = 'var(--ink-600)';
+    adminSec.style.display = 'block';
+    studentSec.style.display = 'none';
+  } else {
+    studentBtn.classList.add('active');
+    studentBtn.style.background = 'var(--green-500)';
+    studentBtn.style.color = '#fff';
+    adminBtn.classList.remove('active');
+    adminBtn.style.background = 'transparent';
+    adminBtn.style.color = 'var(--ink-600)';
+    studentSec.style.display = 'block';
+    adminSec.style.display = 'none';
   }
 }
 
@@ -248,6 +305,33 @@ async function handleLogin(){
   }
 }
 
+async function handleAdminLogin(){
+  const email = document.getElementById('admin-login-email').value.trim().toLowerCase();
+  const password = document.getElementById('admin-login-password').value;
+  const err = document.getElementById('admin-login-error');
+  err.textContent = '';
+
+  if (!email || !password) { err.textContent = 'Enter admin email and password.'; return; }
+
+  try {
+    const result = await apiFetch('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    });
+    
+    if (result.user.role !== 'admin') {
+      throw new Error('Access denied: This account does not have Campus Administrator privileges.');
+    }
+    
+    setSessionEmail(email);
+    setSessionToken(result.token);
+    state.currentUser = normalizeUser(result.user);
+    await enterApp();
+  } catch (error) {
+    err.textContent = error.message;
+  }
+}
+
 async function handleLogout(){
   try { await apiFetch('/auth/logout', { method: 'POST' }); } catch (error) {}
   clearSession();
@@ -276,7 +360,12 @@ async function enterApp(){
   renderUserSidebar();
   renderVerifyStatus();
   refreshEverything();
-  go('dashboard');
+
+  if (state.currentUser.role === 'admin') {
+    go('admin');
+  } else {
+    go('dashboard');
+  }
 }
 
 function renderUserSidebar(){
@@ -284,17 +373,54 @@ function renderUserSidebar(){
   if (!user) return;
   document.getElementById('user-name').textContent = user.name;
   document.getElementById('user-avatar').textContent = user.name.trim().charAt(0).toUpperCase() || '👤';
-  const subMap = { no: 'Not verified', pending: 'Verification pending', yes: 'Verified student' };
-  document.getElementById('user-sub').textContent = subMap[user.verified] || 'Not verified';
-  document.getElementById('dash-greeting').textContent = 'Welcome, ' + user.name.split(' ')[0];
-  document.getElementById('verify-alert').style.display = user.verified === 'yes' ? 'none' : 'flex';
+
+  const roleBadge = document.getElementById('role-badge-text');
+  const navStudent = document.getElementById('nav-student');
+  const navAdmin = document.getElementById('nav-admin');
+
+  if (user.role === 'admin') {
+    if (roleBadge) {
+      roleBadge.textContent = '🛡️ Campus Administrator';
+      roleBadge.style.color = 'var(--coral-500)';
+    }
+    if (navAdmin) navAdmin.style.display = 'flex';
+    if (navStudent) navStudent.style.display = 'none';
+    document.getElementById('user-sub').textContent = 'Administrator';
+    document.getElementById('dash-greeting').textContent = 'Admin Console · ' + user.name.split(' ')[0];
+    document.getElementById('verify-alert').style.display = 'none';
+  } else {
+    if (roleBadge) {
+      roleBadge.textContent = '🎓 Student Account';
+      roleBadge.style.color = 'var(--green-700)';
+    }
+    if (navStudent) navStudent.style.display = 'flex';
+    if (navAdmin) navAdmin.style.display = 'none';
+    const subMap = { no: 'Not verified', pending: 'Verification pending', yes: 'Verified student' };
+    document.getElementById('user-sub').textContent = subMap[user.verified] || 'Not verified';
+    document.getElementById('dash-greeting').textContent = 'Welcome, ' + user.name.split(' ')[0];
+    document.getElementById('verify-alert').style.display = user.verified === 'yes' ? 'none' : 'flex';
+  }
 }
 
 function renderVerifyStatus(){
+  const user = state.currentUser;
+  const studentBox = document.getElementById('student-verify-box');
+  const adminBox = document.getElementById('admin-verify-box');
+
+  if (user && user.role === 'admin') {
+    if (studentBox) studentBox.style.display = 'none';
+    if (adminBox) adminBox.style.display = 'block';
+    renderAdminVerificationQueue();
+    return;
+  }
+
+  if (adminBox) adminBox.style.display = 'none';
+  if (studentBox) studentBox.style.display = 'block';
+
   const verifiedBox = document.getElementById('verify-status-verified');
   const pendingBox = document.getElementById('verify-status-pending');
   const formCard = document.getElementById('verify-form-card');
-  const status = state.currentUser ? (state.currentUser.verification_status || state.currentUser.verified || 'no') : 'no';
+  const status = user ? (user.verification_status || user.verified || 'no') : 'no';
 
   verifiedBox.style.display = 'none';
   pendingBox.style.display = 'none';
@@ -306,6 +432,87 @@ function renderVerifyStatus(){
   } else if (status === 'pending') {
     pendingBox.style.display = 'flex';
     formCard.style.display = 'none';
+  }
+}
+
+async function renderAdminVerificationQueue(){
+  const listEl = document.getElementById('admin-verification-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--ink-400);">Loading verification queue...</div>';
+
+  try {
+    const data = await apiFetch('/admin/verifications');
+    const records = data.verifications || [];
+    if (!records.length) {
+      listEl.innerHTML = '<div style="text-align:center;padding:30px 20px;color:var(--ink-400);font-size:13px;">No student verification requests submitted yet.</div>';
+      return;
+    }
+
+    listEl.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        ${records.map(v => {
+          const isPending = v.status === 'pending';
+          const statusClass = v.status === 'approved' ? 'available' : v.status === 'pending' ? 'idle' : 'booked';
+          const hasDoc = v.document_path && v.document_path.trim();
+
+          return `
+            <div style="background:var(--mint-50);border:1px solid var(--line);border-radius:var(--radius-sm);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <strong style="font-size:14px;color:var(--ink-900);">${escapeHtml(v.student_name || 'Student')}</strong>
+                  <span class="status-pill ${statusClass}" style="text-transform:capitalize;">${escapeHtml(v.status)}</span>
+                </div>
+                <div style="font-size:12px;color:var(--ink-600);margin-top:4px;">
+                  Card ID: <strong>${escapeHtml(v.student_id)}</strong> · Email: ${escapeHtml(v.student_email || '—')}
+                </div>
+                <div style="font-size:11px;color:var(--ink-400);margin-top:2px;">
+                  Submitted: ${v.submitted_at ? new Date(v.submitted_at).toLocaleString() : 'Recently'}
+                </div>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:8px;">
+                ${hasDoc ? `<a href="${escapeHtml(v.document_path)}" target="_blank" class="btn-ghost" style="font-size:11.5px;padding:6px 10px;text-decoration:none;">📄 View ID Photo</a>` : ''}
+                ${isPending ? `
+                  <button class="btn-book" style="padding:6px 14px;font-size:12px;" onclick="processVerification(${v.id}, 'approved')">Approve ✅</button>
+                  <button class="btn-ghost" style="padding:6px 12px;font-size:12px;color:var(--coral-500);" onclick="processVerification(${v.id}, 'rejected')">Reject ✕</button>
+                ` : `
+                  <span style="font-size:12px;font-weight:700;color:var(--ink-400);">Action complete</span>
+                `}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  } catch (err) {
+    listEl.innerHTML = `<div style="color:var(--coral-500);padding:14px;font-size:12.5px;">⚠️ Failed to load verification queue: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function processVerification(verifId, status){
+  try {
+    await apiFetch(`/admin/verifications/${verifId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status })
+    });
+
+    showConfirmModal(
+      status === 'approved' ? '✅' : '❌',
+      `Student ${status}`,
+      `The verification request has been ${status}. The student's account permissions have been updated in the campus database.`,
+      'Verification Processed'
+    );
+
+    renderAdminVerificationQueue();
+    if (state.currentUser && state.currentUser.role === 'admin') {
+      try {
+        const analyticsData = await apiFetch('/admin/analytics');
+        state.analytics = analyticsData || {};
+        renderAdminStats();
+      } catch (e) {}
+    }
+  } catch (err) {
+    showConfirmModal('⚠️', 'Action failed', err.message, 'Admin Action');
   }
 }
 
@@ -328,6 +535,7 @@ async function submitVerification(){
   try {
     const formData = new FormData();
     formData.append('student_id', studentId);
+    formData.append('name', name);
     formData.append('document', photoInput.files[0]);
     await apiFetch('/verification/submit', {
       method: 'POST',
@@ -354,13 +562,19 @@ function guardVerified(){
 const bgPalette = ['#EAF4EE', '#FFE4DC', '#FCEFD2', '#E4ECFB', '#CFEBDA'];
 function pickBg(){ return bgPalette[Math.floor(Math.random() * bgPalette.length)]; }
 const catLabel = { equip: 'Equipment', books: 'Books', space: 'Spaces', skill: 'Skills' };
-const predictionData = [
-  { key: 'projector', name: 'Projector', demand: 12, supply: 5, period: 'Next 7 days' },
-  { key: 'dslr', name: 'DSLR Camera', demand: 8, supply: 6, period: 'Next 7 days' },
-  { key: 'arduino', name: 'Arduino Kit', demand: 15, supply: 10, period: 'Next 7 days' },
-  { key: 'microphone', name: 'Microphone', demand: 9, supply: 4, period: 'Next 7 days' },
-  { key: 'tripod', name: 'Tripod', demand: 7, supply: 3, period: 'Next 7 days' }
+
+// Fallback predictions used before API data loads
+const _defaultPredictions = [
+  { key: 'projector', name: 'Projector', demand: 12, supply: 5, gap: 7, level: 'high', period: 'Next 7 days' },
+  { key: 'dslr', name: 'DSLR Camera', demand: 8, supply: 6, gap: 2, level: 'medium', period: 'Next 7 days' },
+  { key: 'arduino', name: 'Arduino Kit', demand: 15, supply: 10, gap: 5, level: 'high', period: 'Next 7 days' },
+  { key: 'microphone', name: 'Microphone', demand: 9, supply: 4, gap: 5, level: 'high', period: 'Next 7 days' },
+  { key: 'tripod', name: 'Tripod', demand: 7, supply: 3, gap: 4, level: 'medium', period: 'Next 7 days' }
 ];
+
+function getPredictions(){
+  return state.predictions && state.predictions.length ? state.predictions : _defaultPredictions;
+}
 
 function emptyState(msg){
   return `<div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--ink-400);font-size:13px;">${msg}</div>`;
@@ -396,7 +610,7 @@ function renderDashMatches(){
   document.getElementById('stat-shared').textContent = all.filter((resource) => resource.ownerEmail === me.email).length;
   const activeBookings = getBookings().filter((booking) => booking.borrower_id === me.id && booking.status === 'active');
   document.getElementById('stat-bookings').textContent = activeBookings.length;
-  document.getElementById('dash-shortages').textContent = predictionData.filter((p) => predictedGap(p) > 0).length;
+  document.getElementById('dash-shortages').textContent = getPredictions().filter((p) => predictedGap(p) > 0).length;
   document.getElementById('dash-idle').textContent = all.filter((resource) => resourceStatus(resource) === 'idle').length;
   document.getElementById('dash-opportunities').textContent = all.filter((resource) => resourceStatus(resource) === 'idle' && predictedGap(predictionForResource(resource)) > 0).length;
 }
@@ -463,18 +677,19 @@ function renderOwnerList(){
 }
 
 function renderPredictions(){
-  document.getElementById('prediction-grid').innerHTML = predictionData.map((prediction) => {
+  const predictions = getPredictions();
+  document.getElementById('prediction-grid').innerHTML = predictions.map((prediction) => {
     const supply = prediction.supply;
-    const gap = Math.max(0, prediction.demand - supply);
+    const gap = predictedGap(prediction);
     const level = gap >= 5 ? 'High' : gap > 0 ? 'Medium' : 'Low';
     return `<div class="prediction-card ${gap > 0 ? 'shortage' : ''}"><div class="prediction-card-head"><strong>${prediction.name}</strong><span class="status-pill ${gap > 0 ? 'idle' : 'available'}">${level} demand</span></div>
       <div class="prediction-numbers"><div><span>Predicted demand</span><strong>${prediction.demand}</strong></div><div><span>Current supply</span><strong>${supply}</strong></div><div><span>Supply gap</span><strong>${gap}</strong></div></div>
       <div class="prediction-period">${prediction.period} · ${gap > 0 ? 'Shortage predicted' : 'Supply meets demand'}</div></div>`;
   }).join('');
 
-  document.getElementById('gap-list').innerHTML = predictionData.map((prediction) => {
+  document.getElementById('gap-list').innerHTML = predictions.map((prediction) => {
     const gap = predictedGap(prediction);
-    const percent = Math.round((gap / prediction.demand) * 100 || 0);
+    const percent = Math.round((gap / (prediction.demand || 1)) * 100 || 0);
     return `<div class="gap-row ${gap > 0 ? 'gap-warning' : ''}"><div class="cat">${prediction.name}</div><div class="gap-bar-track"><div class="gap-bar-fill" style="width:${percent}%;"></div></div><div class="gap-pct">${gap} short</div></div>`;
   }).join('');
 
@@ -601,21 +816,7 @@ document.getElementById('hamburger').addEventListener('click', () => {
   document.getElementById('sidebar').classList.toggle('open');
 });
 
-document.getElementById('role-student').addEventListener('click', () => {
-  document.getElementById('role-student').classList.add('active');
-  document.getElementById('role-admin').classList.remove('active');
-  document.getElementById('nav-student').style.display = 'flex';
-  document.getElementById('nav-admin').style.display = 'none';
-  go('dashboard');
-});
-
-document.getElementById('role-admin').addEventListener('click', () => {
-  document.getElementById('role-admin').classList.add('active');
-  document.getElementById('role-student').classList.remove('active');
-  document.getElementById('nav-student').style.display = 'none';
-  document.getElementById('nav-admin').style.display = 'flex';
-  go('admin');
-});
+// Role-based views are now managed automatically by backend authentication session
 
 document.querySelectorAll('[data-btab]').forEach((button) => {
   button.addEventListener('click', () => {
@@ -696,10 +897,151 @@ function openReturn(bookingId, name){
   document.getElementById('rm-name').textContent = name;
   document.querySelectorAll('#return-modal .step-row, #return-modal .btn-primary, #return-modal .modal-res').forEach((el) => { el.style.display = ''; });
   document.getElementById('rm-confirm').style.display = 'none';
+  
+  // Reset AI vision return inspection elements
+  const vInput = document.getElementById('rm-vision-file');
+  if (vInput) vInput.value = '';
+  const vRes = document.getElementById('rm-vision-result');
+  if (vRes) { vRes.style.display = 'none'; vRes.innerHTML = ''; }
+  const vLoad = document.getElementById('rm-vision-loading');
+  if (vLoad) vLoad.style.display = 'none';
+  
   openModal('return-modal');
 }
 
+async function runVisionInspection(){
+  const fileInput = document.getElementById('rm-vision-file');
+  const loadEl = document.getElementById('rm-vision-loading');
+  const resEl = document.getElementById('rm-vision-result');
+  if (!fileInput || !fileInput.files || !fileInput.files[0]) return;
+  
+  loadEl.style.display = 'block';
+  resEl.style.display = 'none';
+  
+  try {
+    const formData = new FormData();
+    formData.append('photo', fileInput.files[0]);
+    if (activeReturnBookingId) formData.append('booking_id', activeReturnBookingId);
+    
+    const result = await apiFetch('/ai/vision-inspect', {
+      method: 'POST',
+      body: formData
+    });
+    
+    loadEl.style.display = 'none';
+    resEl.style.display = 'block';
+    
+    resEl.innerHTML = `
+      <div class="vision-badge">🛡️ AI Verified · ${escapeHtml(result.rating)} (${result.integrity_score}% Integrity)</div>
+      <div style="font-size:11.5px;color:var(--ink-900);margin-bottom:6px;">${escapeHtml(result.summary)}</div>
+      <div class="vision-checks">
+        ${(result.checks || []).map(c => `
+          <div class="vision-check-item">
+            <span>• ${escapeHtml(c.item)}</span>
+            <span class="status-tag">✓ ${escapeHtml(c.status)}</span>
+          </div>
+        `).join('')}
+      </div>
+      <div style="font-size:11px;font-weight:800;color:var(--green-700);margin-top:6px;">🎁 Bonus: ${escapeHtml(result.trust_bonus)}</div>
+    `;
+    
+    // Auto-mark checklist items upon AI pass
+    document.querySelectorAll('#return-modal .step-check').forEach(el => el.classList.add('done'));
+  } catch (error) {
+    loadEl.style.display = 'none';
+    resEl.style.display = 'block';
+    resEl.innerHTML = `<div style="font-size:11.5px;color:var(--coral-500);">⚠️ AI Vision check error: ${escapeHtml(error.message)}</div>`;
+  }
+}
+
 function toggleStep(el){ el.classList.toggle('done'); }
+
+/* ================= LOOPBOT AI AGENT ================= */
+function toggleLoopBot(){
+  const win = document.getElementById('loopbot-window');
+  if (!win) return;
+  const isHidden = win.style.display === 'none' || !win.style.display;
+  win.style.display = isHidden ? 'flex' : 'none';
+  if (isHidden) {
+    document.getElementById('loopbot-input')?.focus();
+  }
+}
+
+function askLoopBotChip(text){
+  const input = document.getElementById('loopbot-input');
+  if (input) {
+    input.value = text;
+    handleLoopBotSubmit(new Event('submit'));
+  }
+}
+
+async function handleLoopBotSubmit(e){
+  if (e && e.preventDefault) e.preventDefault();
+  const input = document.getElementById('loopbot-input');
+  if (!input) return;
+  const message = input.value.trim();
+  if (!message) return;
+  
+  input.value = '';
+  appendLoopBotMsg('user', message);
+  
+  // Typing indicator
+  const typingId = 'typing-' + Date.now();
+  appendLoopBotMsg('bot', '<span style="opacity:0.6;">LoopBot is searching campus resources...</span>', null, typingId);
+  
+  try {
+    const data = await apiFetch('/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message })
+    });
+    
+    document.getElementById(typingId)?.remove();
+    appendLoopBotMsg('bot', data.reply, data.suggestions);
+  } catch (error) {
+    document.getElementById(typingId)?.remove();
+    appendLoopBotMsg('bot', '⚠️ Sorry, I ran into an error connecting to campus services. Please try again!');
+  }
+}
+
+function appendLoopBotMsg(sender, text, suggestions = [], id = null){
+  const box = document.getElementById('loopbot-messages');
+  if (!box) return;
+  
+  const div = document.createElement('div');
+  div.className = `loopbot-msg ${sender}`;
+  if (id) div.id = id;
+  
+  // Format markdown bold & linebreaks
+  const formatted = text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br>');
+    
+  let html = `<div class="bubble">${formatted}</div>`;
+  
+  if (suggestions && suggestions.length) {
+    html += '<div style="margin-top:6px;">';
+    suggestions.forEach(item => {
+      const bookable = item.status === 'available';
+      html += `
+        <div class="loopbot-card">
+          <div class="loopbot-card-info">
+            <strong>${item.icon || '📦'} ${escapeHtml(item.name)}</strong>
+            <span>${escapeHtml(item.price)} · ${item.match}% Match · ${escapeHtml(item.location || 'Campus')}</span>
+          </div>
+          <button class="loopbot-card-btn" ${bookable ? '' : 'disabled'} onclick="toggleLoopBot(); openBooking('${escapeAttr(item.id)}','${escapeAttr(item.name)}','${escapeAttr(item.icon || '📦')}','${escapeAttr(item.price)}')">
+            ${bookable ? 'Book' : 'Busy'}
+          </button>
+        </div>
+      `;
+    });
+    html += '</div>';
+  }
+  
+  div.innerHTML = html;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
 
 async function showReturnConfirm(){
   if (!activeReturnBookingId) return;

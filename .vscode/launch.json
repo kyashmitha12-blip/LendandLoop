@@ -5,10 +5,22 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "type": "python",
+            "request": "launch",
+            "name": "Flask: Lend & Loop",
+            "program": "${workspaceFolder}/backend/app.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "cwd": "${workspaceFolder}"
+        },
+        {
             "type": "chrome",
             "request": "launch",
             "name": "Launch Chrome against localhost",
-            "url": "http://localhost:8080",
+            "url": "http://localhost:5000",
             "webRoot": "${workspaceFolder}"
         }
     ]

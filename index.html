@@ -18,31 +18,54 @@
       <div class="mark">L</div><div class="name">Lend <span>&amp; Loop</span></div>
     </div>
 
-    <div class="tab-row" style="margin:0 auto 20px;">
-      <button class="active" id="atab-login" data-atab="login">Log in</button>
-      <button id="atab-signup" data-atab="signup">Sign up</button>
+    <!-- PORTAL SELECTOR: STUDENT VS ADMIN -->
+    <div class="portal-selector" style="display:flex;background:var(--mint-50);border:1px solid var(--line);border-radius:100px;padding:3px;margin:0 auto 16px;">
+      <button type="button" id="ptab-student" class="active" onclick="switchPortal('student')" style="flex:1;border:none;background:var(--green-500);color:#fff;padding:8px 0;border-radius:100px;font-size:12px;font-weight:800;cursor:pointer;">🎓 Student</button>
+      <button type="button" id="ptab-admin" onclick="switchPortal('admin')" style="flex:1;border:none;background:transparent;color:var(--ink-600);padding:8px 0;border-radius:100px;font-size:12px;font-weight:800;cursor:pointer;">🔒 Admin Portal</button>
     </div>
 
-    <div id="auth-login">
-      <label class="f-label">College email</label>
-      <input class="f-input-real" id="login-email" type="email" placeholder="you@college.edu" autocomplete="username">
-      <label class="f-label">Password</label>
-      <input class="f-input-real" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
-      <div class="auth-error" id="login-error"></div>
-      <button class="btn-primary" onclick="handleLogin()">Log in</button>
-      <p class="auth-hint">New here? <a href="#" onclick="switchAuthTab('signup');return false;">Create an account</a></p>
+    <!-- STUDENT PORTAL (LOGIN / SIGNUP) -->
+    <div id="portal-student-section">
+      <div class="tab-row" style="margin:0 auto 16px;">
+        <button class="active" id="atab-login" data-atab="login">Log in</button>
+        <button id="atab-signup" data-atab="signup">Sign up</button>
+      </div>
+
+      <div id="auth-login">
+        <label class="f-label">College email</label>
+        <input class="f-input-real" id="login-email" type="email" placeholder="you@college.edu" autocomplete="username">
+        <label class="f-label">Password</label>
+        <input class="f-input-real" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
+        <div class="auth-error" id="login-error"></div>
+        <button class="btn-primary" onclick="handleLogin()">Log in as Student</button>
+        <p class="auth-hint">Demo student: <code>student@campus.edu</code> / <code>student123</code></p>
+      </div>
+
+      <div id="auth-signup" style="display:none;">
+        <label class="f-label">Full name</label>
+        <input class="f-input-real" id="signup-name" placeholder="Your name">
+        <label class="f-label">College email</label>
+        <input class="f-input-real" id="signup-email" type="email" placeholder="you@college.edu" autocomplete="username">
+        <label class="f-label">Password</label>
+        <input class="f-input-real" id="signup-password" type="password" placeholder="Create a password (min 6 chars)" autocomplete="new-password">
+        <div class="auth-error" id="signup-error"></div>
+        <button class="btn-primary" onclick="handleSignup()">Create account</button>
+        <p class="auth-hint">Already have an account? <a href="#" onclick="switchAuthTab('login');return false;">Log in</a></p>
+      </div>
     </div>
 
-    <div id="auth-signup" style="display:none;">
-      <label class="f-label">Full name</label>
-      <input class="f-input-real" id="signup-name" placeholder="Your name">
-      <label class="f-label">College email</label>
-      <input class="f-input-real" id="signup-email" type="email" placeholder="you@college.edu" autocomplete="username">
-      <label class="f-label">Password</label>
-      <input class="f-input-real" id="signup-password" type="password" placeholder="Create a password (min 6 chars)" autocomplete="new-password">
-      <div class="auth-error" id="signup-error"></div>
-      <button class="btn-primary" onclick="handleSignup()">Create account</button>
-      <p class="auth-hint">Already have an account? <a href="#" onclick="switchAuthTab('login');return false;">Log in</a></p>
+    <!-- ADMIN PORTAL -->
+    <div id="portal-admin-section" style="display:none;">
+      <div style="background:var(--mint-50);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:14px;font-size:11.5px;color:var(--ink-600);text-align:center;">
+        🔒 <strong>Campus Administrator Access</strong><br>Review student ID verifications & manage platform operations.
+      </div>
+      <label class="f-label">Admin email</label>
+      <input class="f-input-real" id="admin-login-email" type="email" placeholder="admin@campus.edu" value="admin@campus.edu" autocomplete="username">
+      <label class="f-label">Admin password</label>
+      <input class="f-input-real" id="admin-login-password" type="password" placeholder="••••••••" value="admin123" autocomplete="current-password">
+      <div class="auth-error" id="admin-login-error"></div>
+      <button class="btn-primary" onclick="handleAdminLogin()">Sign in as Administrator</button>
+      <p class="auth-hint">Demo admin: <code>admin@campus.edu</code> / <code>admin123</code></p>
     </div>
   </div>
 </div>
@@ -51,9 +74,8 @@
   <aside class="sidebar" id="sidebar">
     <div class="sb-brand"><div class="mark">L</div><div class="name">Lend <span>&amp; Loop</span></div></div>
 
-    <div class="role-switch">
-      <button id="role-student" class="active">Student</button>
-      <button id="role-admin">Admin</button>
+    <div id="sidebar-role-badge" style="display:flex;align-items:center;justify-content:center;background:var(--mint-50);border:1px solid var(--line);border-radius:100px;padding:6px 12px;margin:0 4px;font-size:11.5px;font-weight:800;color:var(--green-700);">
+      <span id="role-badge-text">🎓 Student Account</span>
     </div>
 
     <div id="nav-student" class="nav-group">
@@ -213,31 +235,52 @@
         </div>
       </section>
 
-      <!-- VERIFICATION -->
+      <!-- VERIFICATION VIEW -->
       <section class="view" id="view-verify">
-        <div class="page-title"><h2>Student verification</h2><p>Only verified students can book or list resources — this is what keeps the platform campus-only.</p></div>
+        <!-- STUDENT VIEW -->
+        <div id="student-verify-box">
+          <div class="page-title"><h2>Student verification</h2><p>Only verified students can book or list resources — this is what keeps the platform campus-only.</p></div>
 
-        <div class="alert green" id="verify-status-verified" style="display:none;">
-          <span class="ic">✅</span><div><div class="t">You're verified</div><div class="s">You can now book and list resources on Lend & Loop</div></div>
-        </div>
-        <div class="alert amber" id="verify-status-pending" style="display:none;">
-          <span class="ic">⏳</span><div><div class="t">Verification in review</div><div class="s">We're checking your student ID against campus records</div></div>
-        </div>
-
-        <div class="verify-card" id="verify-form-card">
-          <div class="verify-hero">
-            <div class="badge">🛡️ Campus-only access</div>
-            <h3>Verify your student ID</h3>
-            <p>We check your campus card against your college's records — takes under a minute.</p>
+          <div class="alert green" id="verify-status-verified" style="display:none;">
+            <span class="ic">✅</span><div><div class="t">You're verified</div><div class="s">You can now book and list resources on Lend & Loop</div></div>
           </div>
-          <label class="f-label">Full name</label>
-          <input class="f-input-real" id="verify-name" placeholder="As it appears on your ID">
-          <label class="f-label">Campus card number</label>
-          <input class="f-input-real" id="verify-card" placeholder="Enter card ID">
-          <label class="f-label">Upload card photo</label>
-          <input type="file" accept="image/*" id="verify-photo" class="f-upload-real">
-          <div class="auth-error" id="verify-error"></div>
-          <button class="btn-primary" onclick="submitVerification()">Submit for verification</button>
+          <div class="alert amber" id="verify-status-pending" style="display:none;">
+            <span class="ic">⏳</span><div><div class="t">Verification in review</div><div class="s">We're checking your student ID against campus records</div></div>
+          </div>
+
+          <div class="verify-card" id="verify-form-card">
+            <div class="verify-hero">
+              <div class="badge">🛡️ Campus-only access</div>
+              <h3>Verify your student ID</h3>
+              <p>We check your campus card against your college's records — takes under a minute.</p>
+            </div>
+            <label class="f-label">Full name</label>
+            <input class="f-input-real" id="verify-name" placeholder="As it appears on your ID">
+            <label class="f-label">Campus card number</label>
+            <input class="f-input-real" id="verify-card" placeholder="Enter card ID">
+            <label class="f-label">Upload card photo</label>
+            <input type="file" accept="image/*" id="verify-photo" class="f-upload-real">
+            <div class="auth-error" id="verify-error"></div>
+            <button class="btn-primary" onclick="submitVerification()">Submit for verification</button>
+          </div>
+        </div>
+
+        <!-- ADMIN VIEW (VERIFICATION QUEUE) -->
+        <div id="admin-verify-box" style="display:none;">
+          <div class="page-title">
+            <h2>Campus Verification Queue (Admin)</h2>
+            <p>Review submitted campus student cards and authorize verified student privileges.</p>
+          </div>
+
+          <div class="chart-card" style="margin-top:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+              <h4>Submitted Student Verifications</h4>
+              <button class="btn-ghost" onclick="renderAdminVerificationQueue()" style="font-size:11.5px;padding:4px 12px;">↻ Refresh Queue</button>
+            </div>
+            <div id="admin-verification-list">
+              <div style="text-align:center;padding:24px;color:var(--ink-400);">Loading queue...</div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -271,6 +314,20 @@
     <div class="step-row"><div class="step-check" onclick="toggleStep(this)">✓</div>Item powers on and works normally</div>
     <div class="step-row"><div class="step-check" onclick="toggleStep(this)">✓</div>Cables and accessories included</div>
     <div class="step-row"><div class="step-check" onclick="toggleStep(this)">✓</div>No visible damage</div>
+    <div style="height:10px;"></div>
+    
+    <!-- AI VISION INSPECTION -->
+    <div class="ai-vision-box">
+      <div class="ai-vision-header">
+        <span class="ai-tag">✨ AI Vision Inspector</span>
+        <span class="ai-tag-sub">Optional Return Verification</span>
+      </div>
+      <p style="font-size:12px;color:var(--ink-600);margin:6px 0 10px;">Upload a quick photo of the returned item to certify condition & earn +10 Reliability Points.</p>
+      <input type="file" id="rm-vision-file" accept="image/*" class="f-upload-real" onchange="runVisionInspection()">
+      <div id="rm-vision-loading" style="display:none;font-size:12px;color:var(--green-700);margin-top:8px;">🔍 Analyzing image with AI Vision Inspector...</div>
+      <div id="rm-vision-result" style="display:none;" class="vision-result-card"></div>
+    </div>
+    
     <div style="height:14px;"></div>
     <button class="btn-primary" onclick="showReturnConfirm()">Confirm return</button>
     <div id="rm-confirm" style="display:none;">
@@ -311,6 +368,48 @@
   </div>
 </div>
 
+<!-- LOOPBOT AI AGENT WIDGET -->
+<div id="loopbot-container">
+  <button id="loopbot-launcher" class="loopbot-launcher" onclick="toggleLoopBot()" title="Chat with LoopBot AI">
+    <span class="loopbot-badge">AI AGENT</span>
+    <span class="loopbot-icon">🤖</span>
+    <span class="loopbot-text">Ask LoopBot</span>
+  </button>
+  
+  <div id="loopbot-window" class="loopbot-window" style="display:none;">
+    <div class="loopbot-header">
+      <div class="loopbot-title">
+        <span class="loopbot-avatar">🤖</span>
+        <div>
+          <div class="loopbot-name">LoopBot <span class="loopbot-status-dot"></span></div>
+          <div class="loopbot-role">Campus Resource AI Agent</div>
+        </div>
+      </div>
+      <button class="modal-close" onclick="toggleLoopBot()">✕</button>
+    </div>
+    
+    <div id="loopbot-messages" class="loopbot-messages">
+      <div class="loopbot-msg bot">
+        <div class="bubble">
+          👋 Hi there! I'm <strong>LoopBot</strong>, your campus resource concierge. Need gear for a project, looking for quiet study spaces, or curious about upcoming demand shortages? Ask me anything!
+        </div>
+      </div>
+      <div class="loopbot-chips">
+        <button class="chip" onclick="askLoopBotChip('Projector available?')">📽️ Projector</button>
+        <button class="chip" onclick="askLoopBotChip('Gear for video shoot')">📷 Camera gear</button>
+        <button class="chip" onclick="askLoopBotChip('Quiet study space')">🪑 Study space</button>
+        <button class="chip" onclick="askLoopBotChip('Current shortages?')">📊 Shortages</button>
+      </div>
+    </div>
+    
+    <form class="loopbot-input-bar" onsubmit="handleLoopBotSubmit(event)">
+      <input type="text" id="loopbot-input" placeholder="Ask LoopBot anything..." autocomplete="off">
+      <button type="submit" class="loopbot-send-btn" title="Send message">➔</button>
+    </form>
+  </div>
+</div>
+
 <script src="script.js"></script>
 </body>
 </html>
+

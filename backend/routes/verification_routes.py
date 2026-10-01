@@ -15,9 +15,13 @@ verification_bp = Blueprint("verification", __name__)
 @auth_required
 def submit_verification():
     data = request.get_json(silent=True) or {}
-    student_id = (data.get("student_id") or "").strip()
+    student_id = (request.form.get("student_id") or data.get("student_id") or "").strip()
+    name = (request.form.get("name") or data.get("name") or "").strip()
     if not student_id:
         return jsonify({"error": "Student ID is required"}), 400
+
+    if name:
+        request.current_user.name = name
 
     file_name = ""
     uploaded_file = request.files.get("document")
@@ -27,7 +31,7 @@ def submit_verification():
         safe_name = f"{uuid.uuid4().hex}_{uploaded_file.filename}"
         file_path = upload_dir / safe_name
         uploaded_file.save(file_path)
-        file_name = str(file_path)
+        file_name = f"/backend/uploads/{safe_name}"
 
     verification = Verification(
         user_id=request.current_user.id,
