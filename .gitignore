@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+.pytest_cache/
+*.zip
+.vscode/
+.DS_Store
+backend/uploads/*
+!backend/uploads/.gitkeep

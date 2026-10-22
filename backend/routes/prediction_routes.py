@@ -35,14 +35,19 @@ def regenerate_predictions():
         return jsonify({"error": "Admin access required"}), 403
     predictions = build_prediction_snapshot()
     for pred in predictions:
+        pred_data = {
+            "resource_category": pred["resource_category"],
+            "predicted_demand": pred["predicted_demand"],
+            "current_supply": pred["current_supply"],
+            "supply_gap": pred["supply_gap"],
+            "demand_level": pred["demand_level"],
+            "prediction_period": pred.get("prediction_period", "Next 7 days"),
+        }
         existing = Prediction.query.filter_by(resource_category=pred["resource_category"]).first()
         if existing:
-            existing.predicted_demand = pred["predicted_demand"]
-            existing.current_supply = pred["current_supply"]
-            existing.supply_gap = pred["supply_gap"]
-            existing.demand_level = pred["demand_level"]
-            existing.prediction_period = pred["prediction_period"]
+            for k, v in pred_data.items():
+                setattr(existing, k, v)
         else:
-            db.session.add(Prediction(**pred))
+            db.session.add(Prediction(**pred_data))
     db.session.commit()
     return jsonify({"message": "Predictions refreshed", "predictions": predictions})

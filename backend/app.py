@@ -20,6 +20,7 @@ from backend.routes.notification_routes import notification_bp
 from backend.routes.prediction_routes import prediction_bp
 from backend.routes.resource_routes import resource_bp
 from backend.routes.review_routes import review_bp
+from backend.routes.user_routes import user_bp
 from backend.routes.verification_routes import verification_bp
 
 
@@ -30,6 +31,7 @@ def create_app():
     db.init_app(app)
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(user_bp)
     app.register_blueprint(resource_bp)
     app.register_blueprint(booking_bp)
     app.register_blueprint(verification_bp)
@@ -38,6 +40,10 @@ def create_app():
     app.register_blueprint(prediction_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(ai_bp)
+
+    @app.route("/api/health")
+    def health_check():
+        return {"status": "ok", "app": "Predictive Resource Activation", "version": "1.0.0"}, 200
 
     @app.route("/")
     @app.route("/index.html")

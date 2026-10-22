@@ -15,6 +15,7 @@ def list_notifications():
 
 
 @notification_bp.route("/api/notifications/<int:notification_id>/read", methods=["PUT"])
+@notification_bp.route("/api/notifications/<int:notification_id>", methods=["PUT"])
 @auth_required
 def mark_read(notification_id):
     notification = Notification.query.get_or_404(notification_id)
@@ -22,4 +23,12 @@ def mark_read(notification_id):
         return jsonify({"error": "Access denied"}), 403
     notification.is_read = True
     db.session.commit()
-    return jsonify({"message": "Notification marked as read"})
+    return jsonify({"message": "Notification marked as read", "notification": notification.to_dict()})
+
+
+@notification_bp.route("/api/notifications/read-all", methods=["PUT"])
+@auth_required
+def mark_all_read():
+    Notification.query.filter_by(user_id=request.current_user.id, is_read=False).update({"is_read": True})
+    db.session.commit()
+    return jsonify({"message": "All notifications marked as read"})

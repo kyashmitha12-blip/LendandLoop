@@ -24,7 +24,7 @@ def submit_verification():
         request.current_user.name = name
 
     file_name = ""
-    uploaded_file = request.files.get("document")
+    uploaded_file = request.files.get("document") or request.files.get("file")
     if uploaded_file and uploaded_file.filename:
         upload_dir = Path(current_app.config["UPLOAD_FOLDER"])
         upload_dir.mkdir(parents=True, exist_ok=True)

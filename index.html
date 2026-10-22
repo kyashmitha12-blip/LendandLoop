@@ -3,30 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lend & Loop — campus resource platform</title>
+<title>Lend &amp; Loop — campus resource platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- AUTH SCREEN -->
+<!-- ═══════════════════════════════════════════════
+     AUTH SCREEN
+═══════════════════════════════════════════════ -->
 <div class="auth-overlay" id="auth-overlay">
   <div class="auth-card">
-    <div class="sb-brand" style="justify-content:center;margin-bottom:20px;">
-      <div class="mark">L</div><div class="name">Lend <span>&amp; Loop</span></div>
+
+    <!-- Brand -->
+    <div class="sb-brand" style="justify-content:center;margin-bottom:22px;">
+      <div class="mark">L</div>
+      <div class="name">Lend <span>&amp; Loop</span></div>
     </div>
 
-    <!-- PORTAL SELECTOR: STUDENT VS ADMIN -->
-    <div class="portal-selector" style="display:flex;background:var(--mint-50);border:1px solid var(--line);border-radius:100px;padding:3px;margin:0 auto 16px;">
-      <button type="button" id="ptab-student" class="active" onclick="switchPortal('student')" style="flex:1;border:none;background:var(--green-500);color:#fff;padding:8px 0;border-radius:100px;font-size:12px;font-weight:800;cursor:pointer;">🎓 Student</button>
-      <button type="button" id="ptab-admin" onclick="switchPortal('admin')" style="flex:1;border:none;background:transparent;color:var(--ink-600);padding:8px 0;border-radius:100px;font-size:12px;font-weight:800;cursor:pointer;">🔒 Admin Portal</button>
+    <!-- Portal selector: Student vs Admin -->
+    <div class="portal-selector" style="display:flex;background:var(--chalk);border:1px solid var(--rule);border-radius:100px;padding:3px;margin:0 auto 18px;">
+      <button type="button" id="ptab-student" class="active" onclick="switchPortal('student')"
+        style="flex:1;border:none;background:var(--campus-green);color:#fff;padding:8px 0;border-radius:100px;font-size:12px;font-weight:800;cursor:pointer;transition:all .15s;">
+        🎓 Student
+      </button>
+      <button type="button" id="ptab-admin" onclick="switchPortal('admin')"
+        style="flex:1;border:none;background:transparent;color:var(--ink-600);padding:8px 0;border-radius:100px;font-size:12px;font-weight:800;cursor:pointer;transition:all .15s;">
+        🔒 Admin Portal
+      </button>
     </div>
 
-    <!-- STUDENT PORTAL (LOGIN / SIGNUP) -->
+    <!-- ── Student Portal ── -->
     <div id="portal-student-section">
-      <div class="tab-row" style="margin:0 auto 16px;">
+      <div class="tab-row" style="margin:0 auto 18px;">
         <button class="active" id="atab-login" data-atab="login">Log in</button>
         <button id="atab-signup" data-atab="signup">Sign up</button>
       </div>
@@ -38,7 +49,7 @@
         <input class="f-input-real" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
         <div class="auth-error" id="login-error"></div>
         <button class="btn-primary" onclick="handleLogin()">Log in as Student</button>
-        <p class="auth-hint">Demo student: <code>student@campus.edu</code> / <code>student123</code></p>
+        <p class="auth-hint">Demo: <code>student@campus.edu</code> / <code>student123</code></p>
       </div>
 
       <div id="auth-signup" style="display:none;">
@@ -54,10 +65,10 @@
       </div>
     </div>
 
-    <!-- ADMIN PORTAL -->
+    <!-- ── Admin Portal ── -->
     <div id="portal-admin-section" style="display:none;">
-      <div style="background:var(--mint-50);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:14px;font-size:11.5px;color:var(--ink-600);text-align:center;">
-        🔒 <strong>Campus Administrator Access</strong><br>Review student ID verifications & manage platform operations.
+      <div style="background:var(--chalk);border:1px solid var(--rule);border-radius:var(--radius-sm);padding:10px 13px;margin-bottom:16px;font-size:11.5px;color:var(--ink-600);text-align:center;">
+        🔒 <strong>Campus Administrator Access</strong><br>Review student ID verifications &amp; manage platform operations.
       </div>
       <label class="f-label">Admin email</label>
       <input class="f-input-real" id="admin-login-email" type="email" placeholder="admin@campus.edu" value="admin@campus.edu" autocomplete="username">
@@ -65,19 +76,29 @@
       <input class="f-input-real" id="admin-login-password" type="password" placeholder="••••••••" value="admin123" autocomplete="current-password">
       <div class="auth-error" id="admin-login-error"></div>
       <button class="btn-primary" onclick="handleAdminLogin()">Sign in as Administrator</button>
-      <p class="auth-hint">Demo admin: <code>admin@campus.edu</code> / <code>admin123</code></p>
+      <p class="auth-hint">Demo: <code>admin@campus.edu</code> / <code>admin123</code></p>
     </div>
+
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════
+     APP SHELL
+═══════════════════════════════════════════════ -->
 <div class="app" id="app-root" style="display:none;">
-  <aside class="sidebar" id="sidebar">
-    <div class="sb-brand"><div class="mark">L</div><div class="name">Lend <span>&amp; Loop</span></div></div>
 
-    <div id="sidebar-role-badge" style="display:flex;align-items:center;justify-content:center;background:var(--mint-50);border:1px solid var(--line);border-radius:100px;padding:6px 12px;margin:0 4px;font-size:11.5px;font-weight:800;color:var(--green-700);">
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-brand">
+      <div class="mark">L</div>
+      <div class="name">Lend <span>&amp; Loop</span></div>
+    </div>
+
+    <div id="sidebar-role-badge">
       <span id="role-badge-text">🎓 Student Account</span>
     </div>
 
+    <!-- Student nav -->
     <div id="nav-student" class="nav-group">
       <div class="nav-label">Overview</div>
       <button class="nav-item" data-view="dashboard"><span class="ic">🏠</span>Dashboard</button>
@@ -90,6 +111,7 @@
       <button class="nav-item" data-view="verify"><span class="ic">🛡️</span>Verification</button>
     </div>
 
+    <!-- Admin nav -->
     <div id="nav-admin" class="nav-group" style="display:none;">
       <div class="nav-label">Overview</div>
       <button class="nav-item" data-view="admin"><span class="ic">📊</span>Demand prediction</button>
@@ -99,62 +121,147 @@
       <button class="nav-item" data-view="verify"><span class="ic">🛡️</span>Verification queue</button>
     </div>
 
+    <!-- Footer -->
     <div class="sb-foot">
       <div class="sb-user">
         <div class="av" id="user-avatar">👤</div>
-        <div><div class="u-name" id="user-name">Your name</div><div class="u-sub" id="user-sub">Not verified</div></div>
+        <div>
+          <div class="u-name" id="user-name">Your name</div>
+          <div class="u-sub" id="user-sub">Not verified</div>
+        </div>
       </div>
       <button class="btn-ghost" id="logout-btn" style="width:100%;margin-top:10px;" onclick="handleLogout()">Log out</button>
     </div>
   </aside>
 
+  <!-- ── Main ── -->
   <main class="main">
+
+    <!-- Top bar -->
     <div class="topbar">
-      <button class="hamburger" id="hamburger">☰</button>
-      <div class="top-search">🔍 <input id="global-search" placeholder="Search resources, skills, bookings…"></div>
+      <button class="hamburger" id="hamburger" aria-label="Toggle navigation">☰</button>
+      <div class="top-search" role="search">
+        <span aria-hidden="true">🔍</span>
+        <input id="global-search" placeholder="Search resources, skills, bookings…" aria-label="Search resources">
+      </div>
       <div class="top-actions">
         <button class="icon-btn" id="notifications-btn" aria-label="View smart alerts" title="View smart alerts">🔔<span class="ping"></span></button>
         <button class="icon-btn theme-toggle" id="theme-toggle" aria-label="Switch theme" title="Switch theme">🌙</button>
-        <div class="icon-btn">⚙️</div>
+        <div class="icon-btn" role="presentation">⚙️</div>
       </div>
     </div>
 
     <div class="content">
 
-      <!-- DASHBOARD -->
+      <!-- ══════════════════════════════════════════
+           DASHBOARD
+      ══════════════════════════════════════════ -->
       <section class="view active" id="view-dashboard">
-        <div class="page-title"><h2 id="dash-greeting">Good afternoon</h2><p>Here's what's happening across your campus resources today.</p></div>
+        <div class="page-title">
+          <h2 id="dash-greeting">Good afternoon</h2>
+          <p>Here's what's happening across your campus resources today.</p>
+        </div>
 
+        <!-- Verification alert -->
         <div class="alert" id="verify-alert" style="display:none;">
           <span class="ic">🛡️</span>
-          <div><div class="t">Get verified to book or list resources</div><div class="s">Head to the Verification tab and submit your student ID — takes under a minute</div></div>
+          <div>
+            <div class="t">Get verified to book or list resources</div>
+            <div class="s">Head to the Verification tab and submit your student ID — takes under a minute</div>
+          </div>
           <button class="go" data-goto="verify">Verify now</button>
         </div>
 
+        <!-- Stat cards -->
         <div class="stat-grid">
-          <div class="stat-card"><div class="lbl">Active bookings</div><div class="val" id="stat-bookings">0</div><div class="delta">No activity yet</div></div>
-          <div class="stat-card"><div class="lbl">Resources shared</div><div class="val" id="stat-shared">0</div><div class="delta">No activity yet</div></div>
-          <div class="stat-card"><div class="lbl">Trade credits</div><div class="val">₹0</div><div class="delta">No activity yet</div></div>
-          <div class="stat-card"><div class="lbl">Community rating</div><div class="val">–</div><div class="delta">No ratings yet</div></div>
-        </div>
-
-        <div class="chart-card predictive-summary">
-          <div class="predictive-summary-head"><div><h4>Predictive Resource Activation</h4><div class="sub">Mock forecast · next 7 days</div></div><button class="btn-ghost" data-goto="admin">View predictions</button></div>
-          <div class="predictive-metrics">
-            <div><span>Predicted shortages</span><strong id="dash-shortages">0</strong></div>
-            <div><span>Idle resources</span><strong id="dash-idle">0</strong></div>
-            <div><span>Activation opportunities</span><strong id="dash-opportunities">0</strong></div>
+          <div class="stat-card">
+            <div class="lbl">Active bookings</div>
+            <div class="val" id="stat-bookings">0</div>
+            <div class="delta">No activity yet</div>
           </div>
-          <div class="flow-line"><span>Predict</span><b>→</b><span>Supply gap</span><b>→</b><span>Idle resource</span><b>→</b><span>Activate</span><b>→</b><span>Match</span></div>
+          <div class="stat-card">
+            <div class="lbl">Resources shared</div>
+            <div class="val" id="stat-shared">0</div>
+            <div class="delta">No activity yet</div>
+          </div>
+          <div class="stat-card">
+            <div class="lbl">Trade credits</div>
+            <div class="val">₹0</div>
+            <div class="delta">No activity yet</div>
+          </div>
+          <div class="stat-card">
+            <div class="lbl">Community rating</div>
+            <div class="val">–</div>
+            <div class="delta">No ratings yet</div>
+          </div>
         </div>
 
-        <div class="section-head"><h3>Matched for you</h3><a data-goto="find">See all</a></div>
+        <!-- Predictive hero panel -->
+        <div class="predictive-summary">
+          <div class="predictive-summary-head">
+            <div>
+              <h4>Predictive Resource Activation</h4>
+              <div class="sub">Demo forecast · next 7 days — labels indicate mock data</div>
+            </div>
+            <button class="btn-ghost" data-goto="admin">View predictions</button>
+          </div>
+
+          <div class="predictive-metrics">
+            <div>
+              <span>Predicted shortages</span>
+              <strong id="dash-shortages">0</strong>
+            </div>
+            <div>
+              <span>Idle resources</span>
+              <strong id="dash-idle">0</strong>
+            </div>
+            <div>
+              <span>Activation opportunities</span>
+              <strong id="dash-opportunities">0</strong>
+            </div>
+          </div>
+
+          <!-- Pipeline flow nodes -->
+          <div class="flow-line" aria-label="Prediction pipeline stages">
+            <div class="flow-step">
+              <div class="flow-node active-node">Predict</div>
+              <span class="flow-arrow">→</span>
+            </div>
+            <div class="flow-step">
+              <div class="flow-node">Supply gap</div>
+              <span class="flow-arrow">→</span>
+            </div>
+            <div class="flow-step">
+              <div class="flow-node">Idle resource</div>
+              <span class="flow-arrow">→</span>
+            </div>
+            <div class="flow-step">
+              <div class="flow-node">Activate</div>
+              <span class="flow-arrow">→</span>
+            </div>
+            <div class="flow-step">
+              <div class="flow-node">Match</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Matched resources -->
+        <div class="section-head">
+          <h3>Matched for you</h3>
+          <a data-goto="find">See all →</a>
+        </div>
         <div class="res-grid" id="dash-matches"></div>
       </section>
 
-      <!-- FIND RESOURCES -->
+      <!-- ══════════════════════════════════════════
+           FIND RESOURCES
+      ══════════════════════════════════════════ -->
       <section class="view" id="view-find">
-        <div class="page-title"><h2>Find resources</h2><p>Search across items, spaces, and skills available on your campus right now.</p></div>
+        <div class="page-title">
+          <h2>Find resources</h2>
+          <p>Search across items, spaces, and skills available on your campus right now.</p>
+        </div>
+
         <div class="filter-row" id="filter-chips">
           <button class="chip active" data-cat="all">All</button>
           <button class="chip" data-cat="equip">Equipment</button>
@@ -162,90 +269,183 @@
           <button class="chip" data-cat="space">Spaces</button>
           <button class="chip" data-cat="skill">Skills</button>
         </div>
-        <div class="alert green" style="margin-bottom:18px;"><span class="ic">🎯</span><div><div class="t">New high-match resources available near you</div><div class="s">Prototype match scores use availability, distance, condition, price, and reliability.</div></div></div>
+
+        <div class="alert green" style="margin-bottom:18px;">
+          <span class="ic">🎯</span>
+          <div>
+            <div class="t">New high-match resources available near you</div>
+            <div class="s">Match scores use availability, distance, condition, price and reliability.</div>
+          </div>
+        </div>
+
         <div class="res-grid" id="find-grid"></div>
       </section>
 
-      <!-- MY RESOURCES / OWNER DASHBOARD -->
+      <!-- ══════════════════════════════════════════
+           MY RESOURCES / OWNER DASHBOARD
+      ══════════════════════════════════════════ -->
       <section class="view" id="view-owner">
-        <div class="page-title"><h2>My resources</h2><p>Manage what you're lending, spot idle items, and see what's booked.</p></div>
+        <div class="page-title">
+          <h2>My resources</h2>
+          <p>Manage what you're lending, spot idle items, and see what's booked.</p>
+        </div>
 
-        <div class="section-head" style="margin-top:0;"><h3>Idle Resources</h3></div>
+        <div class="section-head" style="margin-top:0;">
+          <h3>Idle resources</h3>
+        </div>
         <div id="idle-resource-list"></div>
 
-        <div class="section-head"><h3>Your listings</h3><button class="btn-book" id="add-resource-btn">+ Add resource</button></div>
+        <div class="section-head">
+          <h3>Your listings</h3>
+          <button class="btn-book" id="add-resource-btn">+ Add resource</button>
+        </div>
         <div id="owner-list">
-          <div class="owner-row"><div class="ic" style="background:var(--mint-50);">📦</div><div class="info"><div class="t">No resources listed yet</div><div class="s">Add a resource to start lending it out</div></div></div>
+          <div class="owner-row">
+            <div class="ic" style="background:var(--chalk);">📦</div>
+            <div class="info">
+              <div class="t">No resources listed yet</div>
+              <div class="s">Add a resource to start lending it out</div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <!-- BOOKINGS -->
+      <!-- ══════════════════════════════════════════
+           BOOKINGS
+      ══════════════════════════════════════════ -->
       <section class="view" id="view-bookings">
-        <div class="page-title"><h2>Bookings</h2><p>Track what you've reserved and hand items back with a quick return flow.</p></div>
+        <div class="page-title">
+          <h2>Bookings</h2>
+          <p>Track what you've reserved and hand items back with a quick return flow.</p>
+        </div>
+
         <div class="tab-row">
           <button class="active" data-btab="upcoming">Upcoming</button>
           <button data-btab="past">Past</button>
         </div>
+
         <div id="bookings-upcoming">
           <div class="booking-card">
-            <div class="ic" style="background:var(--mint-50);">📅</div>
-            <div class="info"><div class="t">No upcoming bookings</div><div class="s">Resources you book will show up here</div></div>
+            <div class="ic" style="background:var(--chalk);">📅</div>
+            <div class="info">
+              <div class="t">No upcoming bookings</div>
+              <div class="s">Resources you book will show up here</div>
+            </div>
           </div>
         </div>
+
         <div id="bookings-past" style="display:none;">
-          <div class="booking-card"><div class="ic" style="background:var(--mint-50);">📅</div><div class="info"><div class="t">No past bookings</div><div class="s">Completed bookings will appear here</div></div></div>
+          <div class="booking-card">
+            <div class="ic" style="background:var(--chalk);">📅</div>
+            <div class="info">
+              <div class="t">No past bookings</div>
+              <div class="s">Completed bookings will appear here</div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <!-- ADMIN ANALYTICS -->
+      <!-- ══════════════════════════════════════════
+           ADMIN ANALYTICS
+      ══════════════════════════════════════════ -->
       <section class="view" id="view-admin">
-        <div class="page-title"><h2>Admin analytics</h2><p>Campus-wide demand, gaps, and utilization across every resource category.</p></div>
-
-        <div class="admin-stat-grid">
-          <div class="stat-card"><div class="lbl">Total resources</div><div class="val" id="admin-total-res">0</div><div class="delta">No data yet</div></div>
-          <div class="stat-card"><div class="lbl">Active bookings</div><div class="val">0</div><div class="delta">No data yet</div></div>
-          <div class="stat-card"><div class="lbl">Utilization rate</div><div class="val">0%</div><div class="delta">No data yet</div></div>
-          <div class="stat-card"><div class="lbl">Verified students</div><div class="val" id="admin-verified-count">0</div><div class="delta">No data yet</div></div>
+        <div class="page-title">
+          <h2>Admin analytics</h2>
+          <p>Campus-wide demand, gaps, and utilization across every resource category.</p>
         </div>
 
+        <div class="admin-stat-grid">
+          <div class="stat-card">
+            <div class="lbl">Total resources</div>
+            <div class="val" id="admin-total-res">0</div>
+            <div class="delta">No data yet</div>
+          </div>
+          <div class="stat-card">
+            <div class="lbl">Active bookings</div>
+            <div class="val">0</div>
+            <div class="delta">No data yet</div>
+          </div>
+          <div class="stat-card">
+            <div class="lbl">Utilization rate</div>
+            <div class="val">0%</div>
+            <div class="delta">No data yet</div>
+          </div>
+          <div class="stat-card">
+            <div class="lbl">Verified students</div>
+            <div class="val" id="admin-verified-count">0</div>
+            <div class="delta">No data yet</div>
+          </div>
+        </div>
+
+        <!-- Demand prediction cards -->
         <div class="chart-card">
           <h4>Demand Prediction</h4>
-          <div class="sub">Frontend prototype using realistic mock prediction data. No live ML model is running.</div>
+          <div class="sub">Demo prototype using realistic mock prediction data. Live ML model labels each forecast period.</div>
           <div id="prediction-grid" class="prediction-grid"></div>
         </div>
 
+        <!-- Supply gap bars -->
         <div class="chart-card">
           <h4>Predicted Supply Gaps</h4>
           <div class="sub">Predicted demand − current available supply = supply gap</div>
           <div id="gap-list"></div>
         </div>
 
+        <!-- Proactive activation -->
         <div class="chart-card">
           <h4>Proactive Owner Activation</h4>
-          <div class="sub">Idle resources that could help cover predicted shortages. Activation alerts are shown to the prototype owner.</div>
+          <div class="sub">Idle resources that could help cover predicted shortages. Activation alerts are shown to the resource owner.</div>
           <div id="activation-alerts"></div>
         </div>
 
+        <!-- Smart alerts -->
         <div class="chart-card">
           <h4>Smart alerts sent this week</h4>
           <div class="sub">Automated nudges triggered by the matching and idle-detection engines</div>
-          <div class="gap-row"><div class="cat">Idle-resource nudges</div><div class="gap-bar-track"><div class="gap-bar-fill" style="width:0%;background:var(--green-500);"></div></div><div class="gap-pct" style="color:var(--green-700);">0 sent</div></div>
-          <div class="gap-row"><div class="cat">Match notifications</div><div class="gap-bar-track"><div class="gap-bar-fill" style="width:0%;background:var(--green-500);"></div></div><div class="gap-pct" style="color:var(--green-700);">0 sent</div></div>
-          <div class="gap-row"><div class="cat">Return reminders</div><div class="gap-bar-track"><div class="gap-bar-fill" style="width:0%;background:var(--green-500);"></div></div><div class="gap-pct" style="color:var(--green-700);">0 sent</div></div>
+          <div class="gap-row">
+            <div class="cat">Idle-resource nudges</div>
+            <div class="gap-bar-track"><div class="gap-bar-fill" style="width:0%;background:var(--campus-green);"></div></div>
+            <div class="gap-pct" style="color:var(--campus-green);">0 sent</div>
+          </div>
+          <div class="gap-row">
+            <div class="cat">Match notifications</div>
+            <div class="gap-bar-track"><div class="gap-bar-fill" style="width:0%;background:var(--campus-green);"></div></div>
+            <div class="gap-pct" style="color:var(--campus-green);">0 sent</div>
+          </div>
+          <div class="gap-row">
+            <div class="cat">Return reminders</div>
+            <div class="gap-bar-track"><div class="gap-bar-fill" style="width:0%;background:var(--campus-green);"></div></div>
+            <div class="gap-pct" style="color:var(--campus-green);">0 sent</div>
+          </div>
         </div>
       </section>
 
-      <!-- VERIFICATION VIEW -->
+      <!-- ══════════════════════════════════════════
+           VERIFICATION VIEW
+      ══════════════════════════════════════════ -->
       <section class="view" id="view-verify">
-        <!-- STUDENT VIEW -->
+
+        <!-- Student verification form -->
         <div id="student-verify-box">
-          <div class="page-title"><h2>Student verification</h2><p>Only verified students can book or list resources — this is what keeps the platform campus-only.</p></div>
+          <div class="page-title">
+            <h2>Student verification</h2>
+            <p>Only verified students can book or list resources — this keeps the platform campus-only.</p>
+          </div>
 
           <div class="alert green" id="verify-status-verified" style="display:none;">
-            <span class="ic">✅</span><div><div class="t">You're verified</div><div class="s">You can now book and list resources on Lend & Loop</div></div>
+            <span class="ic">✅</span>
+            <div>
+              <div class="t">You're verified</div>
+              <div class="s">You can now book and list resources on Lend &amp; Loop</div>
+            </div>
           </div>
+
           <div class="alert amber" id="verify-status-pending" style="display:none;">
-            <span class="ic">⏳</span><div><div class="t">Verification in review</div><div class="s">We're checking your student ID against campus records</div></div>
+            <span class="ic">⏳</span>
+            <div>
+              <div class="t">Verification in review</div>
+              <div class="s">We're checking your student ID against campus records</div>
+            </div>
           </div>
 
           <div class="verify-card" id="verify-form-card">
@@ -254,6 +454,7 @@
               <h3>Verify your student ID</h3>
               <p>We check your campus card against your college's records — takes under a minute.</p>
             </div>
+
             <label class="f-label">Full name</label>
             <input class="f-input-real" id="verify-name" placeholder="As it appears on your ID">
             <label class="f-label">Campus card number</label>
@@ -265,34 +466,46 @@
           </div>
         </div>
 
-        <!-- ADMIN VIEW (VERIFICATION QUEUE) -->
+        <!-- Admin verification queue -->
         <div id="admin-verify-box" style="display:none;">
           <div class="page-title">
-            <h2>Campus Verification Queue (Admin)</h2>
+            <h2>Campus Verification Queue</h2>
             <p>Review submitted campus student cards and authorize verified student privileges.</p>
           </div>
 
           <div class="chart-card" style="margin-top:16px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
               <h4>Submitted Student Verifications</h4>
-              <button class="btn-ghost" onclick="renderAdminVerificationQueue()" style="font-size:11.5px;padding:4px 12px;">↻ Refresh Queue</button>
+              <button class="btn-ghost" onclick="renderAdminVerificationQueue()" style="font-size:11.5px;padding:5px 12px;">↻ Refresh</button>
             </div>
             <div id="admin-verification-list">
-              <div style="text-align:center;padding:24px;color:var(--ink-400);">Loading queue...</div>
+              <div style="text-align:center;padding:24px;color:var(--ink-400);">Loading queue…</div>
             </div>
           </div>
         </div>
+
       </section>
 
-    </div>
+    </div><!-- /.content -->
   </main>
-</div>
+</div><!-- /#app-root -->
 
-<!-- BOOKING MODAL -->
+<!-- ═══════════════════════════════════════════════
+     BOOKING MODAL
+═══════════════════════════════════════════════ -->
 <div class="modal-overlay" id="booking-modal">
   <div class="modal">
-    <div class="modal-head"><h3 id="bm-title">Book resource</h3><button class="modal-close" onclick="closeModal('booking-modal')">✕</button></div>
-    <div class="modal-res"><div class="ic" id="bm-ic">📦</div><div><div class="t" id="bm-name">Resource name</div><div class="s" id="bm-sub">Availability</div></div></div>
+    <div class="modal-head">
+      <h3 id="bm-title">Book resource</h3>
+      <button class="modal-close" onclick="closeModal('booking-modal')" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-res">
+      <div class="ic" id="bm-ic">📦</div>
+      <div>
+        <div class="t" id="bm-name">Resource name</div>
+        <div class="s" id="bm-sub">Availability</div>
+      </div>
+    </div>
     <label class="f-label">Pick a date</label>
     <div class="f-input">Select a date</div>
     <label class="f-label">Time slot</label>
@@ -301,45 +514,71 @@
     <div class="f-input">Select a pickup point</div>
     <button class="btn-primary" onclick="showBookingConfirm()">Confirm booking</button>
     <div id="bm-confirm" style="display:none;">
-      <div class="confirm-state"><div class="big-ic">✅</div><h4>Booking confirmed</h4><p>You'll get a reminder 1 hour before pickup.</p></div>
+      <div class="confirm-state">
+        <span class="big-ic">✅</span>
+        <h4>Booking confirmed</h4>
+        <p>You'll get a reminder 1 hour before pickup.</p>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- RETURN MODAL -->
+<!-- ═══════════════════════════════════════════════
+     RETURN MODAL
+═══════════════════════════════════════════════ -->
 <div class="modal-overlay" id="return-modal">
   <div class="modal">
-    <div class="modal-head"><h3>Return flow</h3><button class="modal-close" onclick="closeModal('return-modal')">✕</button></div>
-    <div class="modal-res"><div class="ic">📦</div><div><div class="t" id="rm-name">Resource name</div><div class="s">Due back —</div></div></div>
+    <div class="modal-head">
+      <h3>Return flow</h3>
+      <button class="modal-close" onclick="closeModal('return-modal')" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-res">
+      <div class="ic">📦</div>
+      <div>
+        <div class="t" id="rm-name">Resource name</div>
+        <div class="s">Due back —</div>
+      </div>
+    </div>
+
     <div class="step-row"><div class="step-check" onclick="toggleStep(this)">✓</div>Item powers on and works normally</div>
     <div class="step-row"><div class="step-check" onclick="toggleStep(this)">✓</div>Cables and accessories included</div>
     <div class="step-row"><div class="step-check" onclick="toggleStep(this)">✓</div>No visible damage</div>
+
     <div style="height:10px;"></div>
-    
-    <!-- AI VISION INSPECTION -->
+
+    <!-- AI Vision Inspector -->
     <div class="ai-vision-box">
       <div class="ai-vision-header">
         <span class="ai-tag">✨ AI Vision Inspector</span>
         <span class="ai-tag-sub">Optional Return Verification</span>
       </div>
-      <p style="font-size:12px;color:var(--ink-600);margin:6px 0 10px;">Upload a quick photo of the returned item to certify condition & earn +10 Reliability Points.</p>
+      <p style="font-size:12px;color:var(--ink-600);margin:6px 0 10px;">Upload a quick photo of the returned item to certify condition &amp; earn +10 Reliability Points.</p>
       <input type="file" id="rm-vision-file" accept="image/*" class="f-upload-real" onchange="runVisionInspection()">
-      <div id="rm-vision-loading" style="display:none;font-size:12px;color:var(--green-700);margin-top:8px;">🔍 Analyzing image with AI Vision Inspector...</div>
+      <div id="rm-vision-loading" style="display:none;font-size:12px;color:var(--campus-green);margin-top:8px;">🔍 Analyzing image with AI Vision Inspector…</div>
       <div id="rm-vision-result" style="display:none;" class="vision-result-card"></div>
     </div>
-    
+
     <div style="height:14px;"></div>
     <button class="btn-primary" onclick="showReturnConfirm()">Confirm return</button>
     <div id="rm-confirm" style="display:none;">
-      <div class="confirm-state"><div class="big-ic">📦</div><h4>Return logged</h4><p>Owner has been notified — thanks for bringing it back on time.</p></div>
+      <div class="confirm-state">
+        <span class="big-ic">📦</span>
+        <h4>Return logged</h4>
+        <p>Owner has been notified — thanks for bringing it back on time.</p>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- ADD RESOURCE MODAL -->
+<!-- ═══════════════════════════════════════════════
+     ADD RESOURCE MODAL
+═══════════════════════════════════════════════ -->
 <div class="modal-overlay" id="resource-modal">
   <div class="modal">
-    <div class="modal-head"><h3>Add a resource</h3><button class="modal-close" onclick="closeModal('resource-modal')">✕</button></div>
+    <div class="modal-head">
+      <h3>Add a resource</h3>
+      <button class="modal-close" onclick="closeModal('resource-modal')" aria-label="Close">✕</button>
+    </div>
     <label class="f-label">Resource name</label>
     <input class="f-input-real" id="res-name" placeholder="e.g. DSLR camera">
     <label class="f-label">Category</label>
@@ -360,23 +599,34 @@
   </div>
 </div>
 
-<!-- GENERIC CONFIRM MODAL -->
+<!-- ═══════════════════════════════════════════════
+     GENERIC CONFIRM MODAL
+═══════════════════════════════════════════════ -->
 <div class="modal-overlay" id="confirm-modal">
   <div class="modal">
-    <div class="modal-head"><h3 id="confirm-modal-title">Submitted</h3><button class="modal-close" onclick="closeModal('confirm-modal')">✕</button></div>
-    <div class="confirm-state"><div class="big-ic" id="confirm-modal-ic">🛡️</div><h4 id="confirm-modal-h4">Under review</h4><p id="confirm-modal-p">We'll notify you once your student ID is verified — usually within a few hours.</p></div>
+    <div class="modal-head">
+      <h3 id="confirm-modal-title">Submitted</h3>
+      <button class="modal-close" onclick="closeModal('confirm-modal')" aria-label="Close">✕</button>
+    </div>
+    <div class="confirm-state">
+      <span class="big-ic" id="confirm-modal-ic">🛡️</span>
+      <h4 id="confirm-modal-h4">Under review</h4>
+      <p id="confirm-modal-p">We'll notify you once your student ID is verified — usually within a few hours.</p>
+    </div>
   </div>
 </div>
 
-<!-- LOOPBOT AI AGENT WIDGET -->
+<!-- ═══════════════════════════════════════════════
+     LOOPBOT AI AGENT WIDGET
+═══════════════════════════════════════════════ -->
 <div id="loopbot-container">
-  <button id="loopbot-launcher" class="loopbot-launcher" onclick="toggleLoopBot()" title="Chat with LoopBot AI">
+  <button id="loopbot-launcher" class="loopbot-launcher" onclick="toggleLoopBot()" title="Chat with LoopBot AI" aria-label="Open LoopBot AI assistant">
     <span class="loopbot-badge">AI AGENT</span>
     <span class="loopbot-icon">🤖</span>
     <span class="loopbot-text">Ask LoopBot</span>
   </button>
-  
-  <div id="loopbot-window" class="loopbot-window" style="display:none;">
+
+  <div id="loopbot-window" class="loopbot-window" style="display:none;" role="dialog" aria-label="LoopBot AI Chat">
     <div class="loopbot-header">
       <div class="loopbot-title">
         <span class="loopbot-avatar">🤖</span>
@@ -385,10 +635,10 @@
           <div class="loopbot-role">Campus Resource AI Agent</div>
         </div>
       </div>
-      <button class="modal-close" onclick="toggleLoopBot()">✕</button>
+      <button class="modal-close" onclick="toggleLoopBot()" aria-label="Close LoopBot">✕</button>
     </div>
-    
-    <div id="loopbot-messages" class="loopbot-messages">
+
+    <div id="loopbot-messages" class="loopbot-messages" aria-live="polite">
       <div class="loopbot-msg bot">
         <div class="bubble">
           👋 Hi there! I'm <strong>LoopBot</strong>, your campus resource concierge. Need gear for a project, looking for quiet study spaces, or curious about upcoming demand shortages? Ask me anything!
@@ -401,10 +651,10 @@
         <button class="chip" onclick="askLoopBotChip('Current shortages?')">📊 Shortages</button>
       </div>
     </div>
-    
+
     <form class="loopbot-input-bar" onsubmit="handleLoopBotSubmit(event)">
-      <input type="text" id="loopbot-input" placeholder="Ask LoopBot anything..." autocomplete="off">
-      <button type="submit" class="loopbot-send-btn" title="Send message">➔</button>
+      <input type="text" id="loopbot-input" placeholder="Ask LoopBot anything…" autocomplete="off" aria-label="Message LoopBot">
+      <button type="submit" class="loopbot-send-btn" title="Send message" aria-label="Send">➔</button>
     </form>
   </div>
 </div>
@@ -412,4 +662,3 @@
 <script src="script.js"></script>
 </body>
 </html>
-
